@@ -120,6 +120,8 @@ static uint8_t glyph(char c, uint8_t row)
     static const uint8_t eight[7]={14,17,17,14,17,17,14};
     static const uint8_t four[7]={18,18,18,31,2,2,2};
     if (row >= 7) return 0;
+    /* Input is stored in lowercase; the bitmap font is uppercase-only. */
+    if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
     if (c >= 'A' && c <= 'Z') return alpha[c-'A'][row];
     switch (c) {
         case '0': return zero[row]; case '1': return one[row];
