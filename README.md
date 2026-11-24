@@ -81,7 +81,7 @@ Typical tools include:
 - xorriso and mtools
 - QEMU and GDB
 
-The initial kernel ELF can be built with `make` using an `x86_64-elf` GCC cross-compiler and NASM. Run `make clean` to remove generated objects and the ELF. This currently builds the kernel ELF only; the Limine boot files and ISO target are not wired up yet.
+The kernel ELF can be built with `make` using an x86_64 GCC toolchain and NASM. The GitHub Actions workflow builds a BIOS/UEFI hybrid ISO on pushes, pull requests, and manual runs, then uploads it as an artifact. Run `make clean` to remove generated objects and the ELF. The workflow uses Limine's binary release for boot support.
 
 ## Current roadmap
 
