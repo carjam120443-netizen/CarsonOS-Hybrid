@@ -20,7 +20,7 @@ Primary repository: https://github.com/carjam120443-netizen/CarsonOS-Hybrid
 | Framebuffer request and drawing code | Implemented, not yet confirmed working | The last reported serial log said `Framebuffer: unavailable`. A later request-ID fix was pushed, but a successful framebuffer response has not yet been confirmed in the available development notes. |
 | CarsonOS boot splash | Implemented in source | Depends on successful framebuffer initialization; a black screen was previously reported. |
 | CarsonShell prompt and command handling | Present in source, needs VM verification | Current source polls the PS/2 controller and implements `help`, `clear`, and `about`. Do not assume keyboard input works until tested. |
-| CarsonWM / desktop | Planned | Not implemented yet. |
+| CarsonWM / desktop | Initial prototype implemented, not yet VM-tested | Basic desktop, Terminal and System Info windows, taskbar, and Tab-based focus switching are in `kernel/main.c`. No mouse or window dragging yet. |
 
 **Last known ISO size:** approximately 4.2 MB (reported by the developer for recent builds). This is a historical observation, not a guaranteed size for future builds.
 
@@ -48,7 +48,7 @@ Primary repository: https://github.com/carjam120443-netizen/CarsonOS-Hybrid
   CPU interrupts remain disabled; entering halt loop.
   ```
 - A follow-up change added the four Limine framebuffer request ID values. The available notes do not establish that this resolved the issue.
-- CarsonShell code was subsequently added, including a terminal-style prompt, basic command parsing, and PS/2 keyboard polling.
+- CarsonShell code was subsequently added, including a terminal-style prompt, basic command parsing, and PS/2 keyboard polling.\n- An initial CarsonWM prototype was added: it draws a desktop, a Terminal window, a System Info window, a taskbar, and switches keyboard focus with Tab. The terminal accepts input only while focused. This is implemented in the kernel's current framebuffer UI code and has not yet been confirmed in VirtualBox.
 - Recent Actions run #11 was reported successful, with commit `457ef43` and an ISO artifact named `CarsonOS-Hybrid-x86_64-ISO`. Run #10 was an older failed run. Check Actions for the latest run before downloading an ISO.
 
 ## Important commits remembered
@@ -140,7 +140,7 @@ A successful GitHub Actions build only proves that the ISO build completed. It d
 - [x] Initial framebuffer drawing implementation
 - [x] CarsonOS ASCII logo asset
 - [x] Initial CarsonShell code and basic command parser
-- [ ] Confirm framebuffer output on a fresh ISO in VirtualBox
+- [ ] Confirm framebuffer output on a fresh ISO in VirtualBox\n- [ ] Confirm CarsonWM desktop, windows, and Tab focus switching in VirtualBox
 - [ ] Confirm keyboard input and shell commands in VirtualBox
 - [ ] Improve text rendering, line handling, scrolling, and screen-size handling
 - [ ] Add reliable keyboard support and a clean input abstraction
@@ -157,7 +157,7 @@ A successful GitHub Actions build only proves that the ISO build completed. It d
 ### Graphical environment
 - [ ] Reusable framebuffer graphics library
 - [ ] Mouse input and cursor
-- [ ] CarsonWM: custom window manager with movable and resizable windows
+- [x] CarsonWM: initial framebuffer desktop and two basic focusable windows (no mouse/dragging yet)\n- [ ] CarsonWM: mouse input, movable/resizable windows, and window controls
 - [ ] CarsonDM: display/login manager (after the necessary session and user infrastructure exists)
 - [ ] CarsonDesktop: desktop, panel/taskbar, launcher, clock, wallpaper, and settings
 - [ ] Native CarsonOS applications
