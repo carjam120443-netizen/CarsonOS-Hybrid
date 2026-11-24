@@ -29,9 +29,17 @@ jobs:
 
       - name: Fetch Limine binary release
         run: |
-          git clone --depth=1 --branch=v12.x-binary \
-            https://github.com/limine-bootloader/limine.git limine
-          make -C limine
+          set -eux
+          mkdir -p limine
+          curl -fL \
+            https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.gz \
+            -o /tmp/limine-binary.tar.gz
+          tar -xzf /tmp/limine-binary.tar.gz -C limine
+
+          LIMINE_DIR="$(dirname "$(find limine -type f -name limine-bios.sys -print -quit)")"
+          test -n "$LIMINE_DIR"
+          echo "LIMINE_DIR=$LIMINE_DIR" >> "$GITHUB_ENV"
+          make -C "$LIMINE_DIR"
 
       - name: Assemble bootable ISO
         run: |
@@ -41,10 +49,10 @@ jobs:
           cp build/kernel.elf iso_root/boot/kernel.elf
           cp boot/limine.conf iso_root/boot/limine/limine.conf
 
-          cp limine/limine-bios.sys iso_root/boot/limine/
-          cp limine/limine-bios-cd.bin iso_root/boot/limine/
-          cp limine/limine-uefi-cd.bin iso_root/boot/limine/
-          cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
+          cp "$LIMINE_DIR/limine-bios.sys" iso_root/boot/limine/
+          cp "$LIMINE_DIR/limine-bios-cd.bin" iso_root/boot/limine/
+          cp "$LIMINE_DIR/limine-uefi-cd.bin" iso_root/boot/limine/
+          cp "$LIMINE_DIR/BOOTX64.EFI" iso_root/EFI/BOOT/
 
           xorriso -as mkisofs \
             -R -r -J \
@@ -54,7 +62,7 @@ jobs:
             -efi-boot-part --efi-boot-image --protective-msdos-label \
             iso_root -o CarsonOS-Hybrid-x86_64.iso
 
-          ./limine/limine bios-install CarsonOS-Hybrid-x86_64.iso
+          "$LIMINE_DIR/limine" bios-install CarsonOS-Hybrid-x86_64.iso
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
