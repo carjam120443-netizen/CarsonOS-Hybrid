@@ -45,11 +45,7 @@ void kernel_main(void)
     serial_init();
 
     serial_write("\n");
-    serial_write("  ______                           ____   _____\n");
-    serial_write(" / ____/___ _________  ____  ____  / __/  / ___/\n");
-    serial_write("/ /   / __ `/ ___/ _ \/ __ \/ __ \/ /_    \\__ \\n");
-    serial_write("/ /___/ /_/ / /  /  __/ /_/ / / / / __/   ___/ /\n");
-    serial_write("\\____/\\__,_/_/   \\___/\\____/_/ /_/_/     /____/\n");
+    serial_write("CarsonOS Hybrid\n");
     serial_write("\nCarsonOS Hybrid kernel\n");
     serial_write("Architecture: x86_64\n");
     serial_write("Boot status: kernel entry reached\n");
