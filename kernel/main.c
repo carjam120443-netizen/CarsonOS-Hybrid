@@ -117,11 +117,12 @@ static uint8_t glyph(char c, uint8_t row)
     static const uint8_t one[7]={4,12,4,4,4,4,14};
     static const uint8_t six[7]={14,16,16,30,17,17,14};
     static const uint8_t eight[7]={14,17,17,14,17,17,14};
+    static const uint8_t four[7]={18,18,18,31,2,2,2};
     if (row >= 7) return 0;
     if (c >= 'A' && c <= 'Z') return alpha[c-'A'][row];
     switch (c) {
         case '0': return zero[row]; case '1': return one[row];
-        case '6': return six[row]; case '8': return eight[row];
+        case '6': return six[row]; case '8': return eight[row]; case '4': return four[row];
         case ':': return (row == 2 || row == 5) ? 4 : 0;
         case '-': return row == 3 ? 14 : 0;
         case '_': return row == 6 ? 31 : 0;
