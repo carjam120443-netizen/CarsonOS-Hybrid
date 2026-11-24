@@ -49,6 +49,12 @@ static volatile uint64_t limine_requests_end_marker[2] = {
 
 static struct limine_framebuffer *fb;
 
+/* Render complete frames in RAM before presenting them to the framebuffer. */
+#define BACKBUFFER_MAX_WIDTH 1920
+#define BACKBUFFER_MAX_HEIGHT 1080
+static uint32_t backbuffer[BACKBUFFER_MAX_WIDTH * BACKBUFFER_MAX_HEIGHT];
+static int backbuffer_enabled;
+
 static void serial_init(void)
 {
     arch_outb(COM1 + 1, 0);
@@ -79,6 +85,10 @@ static uint32_t component(uint8_t value, uint8_t bits)
 static void pixel(uint64_t x, uint64_t y, uint32_t color)
 {
     if (!fb || x >= fb->width || y >= fb->height) return;
+    if (backbuffer_enabled) {
+        backbuffer[y * fb->width + x] = color;
+        return;
+    }
     uint32_t r = component((uint8_t)(color >> 16), fb->red_mask_size);
     uint32_t g = component((uint8_t)(color >> 8), fb->green_mask_size);
     uint32_t b = component((uint8_t)color, fb->blue_mask_size);
@@ -89,6 +99,26 @@ static void pixel(uint64_t x, uint64_t y, uint32_t color)
                         + y * fb->pitch + x * (fb->bpp / 8);
     for (uint16_t i = 0; i < fb->bpp / 8; ++i)
         p[i] = (uint8_t)(value >> (i * 8));
+}
+
+static void flush_framebuffer(void)
+{
+    if (!fb || !backbuffer_enabled) return;
+    volatile uint8_t *base = (volatile uint8_t *)(uintptr_t)fb->address;
+    for (uint64_t y = 0; y < fb->height; ++y) {
+        for (uint64_t x = 0; x < fb->width; ++x) {
+            uint32_t color = backbuffer[y * fb->width + x];
+            uint32_t r = component((uint8_t)(color >> 16), fb->red_mask_size);
+            uint32_t g = component((uint8_t)(color >> 8), fb->green_mask_size);
+            uint32_t b = component((uint8_t)color, fb->blue_mask_size);
+            uint32_t value = (r << fb->red_mask_shift) |
+                             (g << fb->green_mask_shift) |
+                             (b << fb->blue_mask_shift);
+            volatile uint8_t *p = base + y * fb->pitch + x * (fb->bpp / 8);
+            for (uint16_t i = 0; i < fb->bpp / 8; ++i)
+                p[i] = (uint8_t)(value >> (i * 8));
+        }
+    }
 }
 static void rect(uint64_t x, uint64_t y, uint64_t w, uint64_t h, uint32_t c)
 {
@@ -208,6 +238,7 @@ static void draw_switcher(void)
         text("ALT TAB", x + 14, y + 12, ACCENT, 1);
         text(focused_window == 0 ? "CARSONSHELL" : "SYSTEM INFO",
              x + 14, y + 36, TEXT, 1);
+        flush_framebuffer();
         for (volatile unsigned delay = 0; delay < 1800000; ++delay)
             __asm__ volatile ("pause");
     }
@@ -246,6 +277,7 @@ static void draw_desktop(void)
     text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
          fb->height - 20, MUTED, 1);
     draw_cursor();
+    flush_framebuffer();
 }
 
 static int command_is(const char *expected)
@@ -422,7 +454,12 @@ static void framebuffer_init(void)
         serial_write("Framebuffer: unsupported format\n");
         return;
     }
-    serial_write("Framebuffer: initialized\n");
+    backbuffer_enabled = fb->width <= BACKBUFFER_MAX_WIDTH &&
+                         fb->height <= BACKBUFFER_MAX_HEIGHT;
+    if (backbuffer_enabled)
+        serial_write("Framebuffer: initialized (backbuffer enabled)\n");
+    else
+        serial_write("Framebuffer: initialized (direct-render fallback)\n");
 }
 
 __attribute__((noreturn))
