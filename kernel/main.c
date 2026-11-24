@@ -129,7 +129,9 @@ static void flush_region(uint64_t x, uint64_t y, uint64_t w, uint64_t h)
 static void flush_framebuffer(void)
 {
     if (!fb || !backbuffer_enabled) return;
+    serial_write("CarsonWM diagnostic: framebuffer flush entered\n");
     flush_region(0, 0, fb->width, fb->height);
+    serial_write("CarsonWM diagnostic: framebuffer flush completed\n");
 }
 static void rect(uint64_t x, uint64_t y, uint64_t w, uint64_t h, uint32_t c)
 {
@@ -285,7 +287,13 @@ static void draw_app_menu(void)
 
 static void draw_desktop(void)
 {
+    static int first_draw = 1;
+    int diagnose = first_draw;
+    first_draw = 0;
+    if (diagnose) serial_write("CarsonWM diagnostic: desktop draw entered\n");
+
     rect(0, 0, fb->width, fb->height, BG);
+    if (diagnose) serial_write("CarsonWM diagnostic: background painted\n");
 
     term_x = 24;
     term_y = 42;
@@ -321,6 +329,7 @@ static void draw_desktop(void)
     if (window_visible[1] && !window_minimized[1])
         draw_window(window_x[1], window_y[1], window_w[1], window_h[1],
                     "SYSTEM INFO", 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: windows painted\n");
 
     /* Keep the system information panel free of the duplicate CarsonOS label. */
     if (window_visible[1] && !window_minimized[1]) {
@@ -343,8 +352,12 @@ static void draw_desktop(void)
     rect(fb->width > 104 ? fb->width - 104 : 0, fb->height - 21, 7, 7, 0x55D68B);
     text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
          fb->height - 20, MUTED, 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: desktop content painted\n");
     draw_cursor();
+    if (diagnose) serial_write("CarsonWM diagnostic: cursor painted\n");
+    if (diagnose) serial_write("CarsonWM diagnostic: about to flush framebuffer\n");
     flush_framebuffer();
+    if (diagnose) serial_write("CarsonWM diagnostic: desktop draw completed\n");
 }
 
 static int command_is(const char *expected)
@@ -609,6 +622,7 @@ void kernel_main(void)
     if (fb) {
         focused_window = 0;
         mouse_init();
+        serial_write("CarsonWM diagnostic: mouse_init returned\n");
         draw_desktop();
         serial_write("CarsonWM: desktop ready\n");
         serial_write("CarsonShell: ready\n");
