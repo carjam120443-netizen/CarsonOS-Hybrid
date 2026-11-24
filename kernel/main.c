@@ -207,6 +207,7 @@ static void draw_input(void)
     rect(term_x + 12, y, term_w - 24, 30, 0x0A1725);
     text("CARSONOS >", term_x + 22, y + 10, ACCENT, 1);
     text(command, term_x + 100, y + 10, TEXT, 1);
+    flush_framebuffer();
 }
 
 static void output_line(const char *s, unsigned row, uint32_t color)
