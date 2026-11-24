@@ -145,6 +145,79 @@ static void text(const char *s, uint64_t x, uint64_t y,
         ++s;
     }
 }
+
+#define KBD_DATA 0x60
+#define KBD_STATUS 0x64
+static char command[64];
+static unsigned command_len;
+static unsigned line_y;
+static void draw_terminal_text(const char *s, uint64_t x, uint64_t y, uint32_t color)
+{
+    text(s, x, y, color, 2);
+}
+static void draw_input(void)
+{
+    rect(150, 610, fb->width > 500 ? fb->width - 300 : fb->width - 40, 34, PANEL);
+    draw_terminal_text("CARSONOS", 170, 620, ACCENT);
+    draw_terminal_text(command, 290, 620, TEXT);
+}
+static void output_line(const char *s, unsigned row, uint32_t color)
+{
+    draw_terminal_text(s, 170, 470 + row * 28, color);
+}
+static void run_command(void)
+{
+    command[command_len] = 0;
+    rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
+    if (!command_len) { draw_input(); return; }
+    if (!__builtin_strcmp(command, "help")) {
+        output_line("HELP - SHOW COMMANDS", 0, TEXT);
+        output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
+        output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
+    } else if (!__builtin_strcmp(command, "clear")) {
+        rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
+    } else if (!__builtin_strcmp(command, "about")) {
+        output_line("CARSONOS HYBRID", 0, ACCENT);
+        output_line("A TINY X86_64 KERNEL.", 1, TEXT);
+        output_line("BUILT FROM SCRATCH.", 2, TEXT);
+    } else {
+        output_line("UNKNOWN COMMAND - TYPE HELP", 0, MUTED);
+    }
+    command_len = 0;
+    command[0] = 0;
+    draw_input();
+}
+static char key_character(uint8_t sc)
+{
+    static const char keys[58] = {
+        [16]='q',[17]='w',[18]='e',[19]='r',[20]='t',[21]='y',[22]='u',
+        [23]='i',[24]='o',[25]='p',[30]='a',[31]='s',[32]='d',[33]='f',
+        [34]='g',[35]='h',[36]='j',[37]='k',[38]='l',[44]='z',[45]='x',
+        [46]='c',[47]='v',[48]='b',[49]='n',[50]='m',[57]=' '
+    };
+    return sc < 58 ? keys[sc] : 0;
+}
+static void keyboard_poll(void)
+{
+    if (!(arch_inb(KBD_STATUS) & 1)) return;
+    uint8_t sc = arch_inb(KBD_DATA);
+    if (sc & 0x80) return;
+    if (sc == 0x1c) { run_command(); return; }
+    if (sc == 0x0e) {
+        if (command_len) command[--command_len] = 0;
+        rect(285, 610, 500, 34, PANEL);
+        draw_input();
+        return;
+    }
+    char ch = key_character(sc);
+    if (ch && command_len < sizeof(command)-1) {
+        command[command_len++] = ch;
+        command[command_len] = 0;
+        rect(285, 610, 500, 34, PANEL);
+        draw_input();
+    }
+}
+
 static void framebuffer_init(void)
 {
     struct limine_framebuffer_response *response = framebuffer_request.response;
@@ -186,10 +259,26 @@ void kernel_main(void)
     arch_disable_interrupts();
     serial_init();
     serial_write("\nCarsonOS Hybrid\n");
-    serial_write("Architecture: x86_64\n");
     serial_write("Boot status: kernel entry reached\n");
     framebuffer_init();
-    serial_write("Serial console: COM1 ready\n");
-    serial_write("CPU interrupts remain disabled; entering halt loop.\n");
-    for (;;) arch_halt();
+    if (fb) {
+        rect(0,0,fb->width,fb->height,BG);
+        uint64_t pw = fb->width > 900 ? 868 : fb->width - 32;
+        uint64_t px = (fb->width-pw)/2;
+        uint64_t py = fb->height > 500 ? (fb->height-420)/2 : 16;
+        rect(px,py,pw,4,ACCENT);
+        rect(px,py+4,pw,416,PANEL);
+        uint32_t title_scale = fb->width >= 800 ? 5 : 3;
+        text("CARSONOS",(fb->width-8*6*title_scale)/2,py+35,ACCENT,title_scale);
+        text("CARSONSHELL - TERMINAL",px+32,py+145,TEXT,2);
+        text("TYPE HELP TO GET STARTED",px+32,py+190,MUTED,2);
+        text("HELP   CLEAR   ABOUT",px+32,py+230,ACCENT,2);
+        line_y = py;
+        draw_input();
+        serial_write("CarsonShell: ready\n");
+    }
+    for (;;) {
+        keyboard_poll();
+        __asm__ volatile ("pause");
+    }
 }
