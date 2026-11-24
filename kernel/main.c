@@ -210,13 +210,18 @@ static int window_maximized[2];
 static uint64_t window_x[2], window_y[2], window_w[2], window_h[2];
 
 static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
-                        const char *title, unsigned id)
+                        const char *title, unsigned id, int diagnose)
 {
+    if (diagnose) serial_write(id == 0 ? "CarsonWM diagnostic: terminal window draw entered\n" : "CarsonWM diagnostic: system window draw entered\n");
     uint32_t border = focused_window == id ? ACCENT : MUTED;
     rect(x, y, w, h, border);
+    if (diagnose) serial_write("CarsonWM diagnostic: window border painted\n");
     rect(x + 2, y + 2, w - 4, h - 4, PANEL);
+    if (diagnose) serial_write("CarsonWM diagnostic: window body painted\n");
     rect(x + 2, y + 2, w - 4, 25, focused_window == id ? 0x19364A : 0x172536);
+    if (diagnose) serial_write("CarsonWM diagnostic: window titlebar painted\n");
     text(title, x + 12, y + 10, focused_window == id ? ACCENT : TEXT, 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: window title painted\n");
 
     /* Window controls: minimize, maximize/restore, close. */
     uint64_t controls_x = x + w - 66;
@@ -224,6 +229,8 @@ static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
     rect(controls_x + 25, y + 9, 10, 10, TEXT);
     rect(controls_x + 27, y + 11, 6, 6, 0x172536);
     text("X", controls_x + 47, y + 10, TEXT, 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: window controls painted\n");
+    if (diagnose) serial_write(id == 0 ? "CarsonWM diagnostic: terminal window draw completed\n" : "CarsonWM diagnostic: system window draw completed\n");
 }
 
 static void draw_input(int present)
@@ -294,6 +301,7 @@ static void draw_desktop(void)
 
     rect(0, 0, fb->width, fb->height, BG);
     if (diagnose) serial_write("CarsonWM diagnostic: background painted\n");
+    if (diagnose) serial_write("CarsonWM diagnostic: calculating window geometry\n");
 
     term_x = 24;
     term_y = 42;
@@ -322,16 +330,18 @@ static void draw_desktop(void)
     /* Keep terminal content and input coordinates aligned when maximized. */
     term_x = window_x[0]; term_y = window_y[0];
     term_w = window_w[0]; term_h = window_h[0];
+    if (diagnose) serial_write("CarsonWM diagnostic: window geometry calculated\n");
 
     if (window_visible[0] && !window_minimized[0])
         draw_window(window_x[0], window_y[0], window_w[0], window_h[0],
-                    "CARSONSHELL - TERMINAL", 0);
+                    "CARSONSHELL - TERMINAL", 0, diagnose);
     if (window_visible[1] && !window_minimized[1])
         draw_window(window_x[1], window_y[1], window_w[1], window_h[1],
-                    "SYSTEM INFO", 1);
-    if (diagnose) serial_write("CarsonWM diagnostic: windows painted\n");
+                    "SYSTEM INFO", 1, diagnose);
+    if (diagnose) serial_write("CarsonWM diagnostic: both window draws completed\n");
 
     /* Keep the system information panel free of the duplicate CarsonOS label. */
+    if (diagnose) serial_write("CarsonWM diagnostic: system info content starting\n");
     if (window_visible[1] && !window_minimized[1]) {
         uint64_t ix = window_x[1] + 12;
         uint64_t iy = window_y[1] + 62;
@@ -339,24 +349,33 @@ static void draw_desktop(void)
         text("BOOT: LIMINE", ix, iy + 28, TEXT, 1);
         text("SHELL: READY", ix, iy + 56, TEXT, 1);
     }
+    if (diagnose) serial_write("CarsonWM diagnostic: system info content completed\n");
 
+    if (diagnose) serial_write("CarsonWM diagnostic: taskbar drawing started\n");
     rect(0, fb->height - 30, fb->width, 30, 0x101E30);
     rect(0, fb->height - 30, fb->width, 2, ACCENT);
     text("CARSONOS", 12, fb->height - 20, ACCENT, 1);
     text("TAB: SWITCH WINDOW", 120, fb->height - 20, MUTED, 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: taskbar drawing completed\n");
 
+    if (diagnose) serial_write("CarsonWM diagnostic: app menu drawing started\n");
     draw_app_menu();
+    if (diagnose) serial_write("CarsonWM diagnostic: app menu drawing completed\n");
     if (window_visible[0] && !window_minimized[0])
         draw_input(0);
+    if (diagnose) serial_write("CarsonWM diagnostic: terminal input area painted\n");
     /* This lamp reports that the kernel is running, not measured CPU usage. */
     rect(fb->width > 104 ? fb->width - 104 : 0, fb->height - 21, 7, 7, 0x55D68B);
     text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
          fb->height - 20, MUTED, 1);
+    if (diagnose) serial_write("CarsonWM diagnostic: CPU status lamp painted\n");
     if (diagnose) serial_write("CarsonWM diagnostic: desktop content painted\n");
     draw_cursor();
     if (diagnose) serial_write("CarsonWM diagnostic: cursor painted\n");
     if (diagnose) serial_write("CarsonWM diagnostic: about to flush framebuffer\n");
+    if (diagnose) serial_write("CarsonWM diagnostic: full framebuffer flush starting\n");
     flush_framebuffer();
+    if (diagnose) serial_write("CarsonWM diagnostic: full framebuffer flush returned\n");
     if (diagnose) serial_write("CarsonWM diagnostic: desktop draw completed\n");
 }
 
