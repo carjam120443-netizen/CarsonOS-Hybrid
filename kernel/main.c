@@ -253,10 +253,18 @@ static void keyboard_poll(void)
     if (!(arch_inb(KBD_STATUS) & 1)) return;
     uint8_t sc = arch_inb(KBD_DATA);
     if (sc & 0x80) return;
+
+    /* Tab changes focus between the terminal and system information windows. */
+    if (sc == 0x0f) {
+        focused_window ^= 1u;
+        draw_desktop();
+        return;
+    }
+    if (focused_window != 0) return;
+
     if (sc == 0x1c) { run_command(); return; }
     if (sc == 0x0e) {
         if (command_len) command[--command_len] = 0;
-        rect(285, 610, 500, 34, PANEL);
         draw_input();
         return;
     }
@@ -264,7 +272,6 @@ static void keyboard_poll(void)
     if (ch && command_len < sizeof(command)-1) {
         command[command_len++] = ch;
         command[command_len] = 0;
-        rect(285, 610, 500, 34, PANEL);
         draw_input();
     }
 }
