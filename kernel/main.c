@@ -30,7 +30,8 @@ volatile uint64_t limine_base_revision[3] = {
 };
 __attribute__((used, section(".limine_requests")))
 static volatile struct limine_framebuffer_request framebuffer_request = {
-    .id = {0x9d5827dcd881dd75, 0xa3148604f6fab11b, 0, 0},
+    .id = {0xc7b1dd30df4c8b88, 0x0a82e883a194f07b,
+            0x9d5827dcd881dd75, 0xa3148604f6fab11b},
     .revision = 0,
     .response = 0
 };
