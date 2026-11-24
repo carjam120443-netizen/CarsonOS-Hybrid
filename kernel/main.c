@@ -150,7 +150,6 @@ static void text(const char *s, uint64_t x, uint64_t y,
 #define KBD_STATUS 0x64
 static char command[64];
 static unsigned command_len;
-static unsigned line_y;
 static void draw_terminal_text(const char *s, uint64_t x, uint64_t y, uint32_t color)
 {
     text(s, x, y, color, 2);
@@ -164,6 +163,12 @@ static void draw_input(void)
 static void output_line(const char *s, unsigned row, uint32_t color)
 {
     draw_terminal_text(s, 170, 470 + row * 28, color);
+}
+static int command_is(const char *expected)
+{
+    unsigned i = 0;
+    while (command[i] && expected[i] && command[i] == expected[i]) ++i;
+    return command[i] == 0 && expected[i] == 0;
 }
 static void run_command(void)
 {
@@ -273,7 +278,6 @@ void kernel_main(void)
         text("CARSONSHELL - TERMINAL",px+32,py+145,TEXT,2);
         text("TYPE HELP TO GET STARTED",px+32,py+190,MUTED,2);
         text("HELP   CLEAR   ABOUT",px+32,py+230,ACCENT,2);
-        line_y = py;
         draw_input();
         serial_write("CarsonShell: ready\n");
     }
