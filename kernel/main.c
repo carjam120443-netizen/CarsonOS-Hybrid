@@ -155,6 +155,10 @@ static unsigned command_len;
 static uint64_t term_x, term_y, term_w, term_h;
 static uint64_t info_x, info_w;
 static unsigned focused_window;
+static int alt_pressed;
+static uint64_t mouse_x, mouse_y;
+static uint8_t mouse_packet[3];
+static unsigned mouse_packet_index;
 
 static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
                         const char *title, unsigned id)
@@ -178,6 +182,35 @@ static void draw_input(void)
 static void output_line(const char *s, unsigned row, uint32_t color)
 {
     text(s, term_x + 20, term_y + 66 + row * 26, color, 2);
+}
+
+static void draw_cursor(void)
+{
+    for (int row = 0; row < 14; ++row) {
+        for (int col = 0; col <= row / 2; ++col) {
+            uint64_t x = mouse_x + (uint64_t)col;
+            uint64_t y = mouse_y + (uint64_t)row;
+            pixel(x, y, (col == 0 || col == row / 2) ? 0x07111D : 0xFFFFFF);
+        }
+    }
+}
+
+static void draw_switcher(void)
+{
+    const uint64_t widths[3] = {176, 216, 256};
+    const uint64_t heights[3] = {62, 76, 90};
+    for (unsigned frame = 0; frame < 3; ++frame) {
+        uint64_t w = widths[frame], h = heights[frame];
+        uint64_t x = fb->width > w ? (fb->width - w) / 2 : 0;
+        uint64_t y = fb->height > h ? (fb->height - h) / 2 : 0;
+        rect(x, y, w, h, ACCENT);
+        rect(x + 2, y + 2, w - 4, h - 4, PANEL);
+        text("ALT TAB", x + 14, y + 12, ACCENT, 1);
+        text(focused_window == 0 ? "CARSONSHELL" : "SYSTEM INFO",
+             x + 14, y + 36, TEXT, 1);
+        for (volatile unsigned delay = 0; delay < 1800000; ++delay)
+            __asm__ volatile ("pause");
+    }
 }
 
 static void draw_desktop(void)
@@ -208,6 +241,11 @@ static void draw_desktop(void)
     text("TAB: SWITCH WINDOW", 120, fb->height - 20, MUTED, 1);
 
     draw_input();
+    /* This lamp reports that the kernel is running, not measured CPU usage. */
+    rect(fb->width > 104 ? fb->width - 104 : 0, fb->height - 21, 7, 7, 0x55D68B);
+    text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
+         fb->height - 20, MUTED, 1);
+    draw_cursor();
 }
 
 static int command_is(const char *expected)
@@ -250,14 +288,18 @@ static char key_character(uint8_t sc)
 }
 static void keyboard_poll(void)
 {
-    if (!(arch_inb(KBD_STATUS) & 1)) return;
+    uint8_t status = arch_inb(KBD_STATUS);
+    if (!(status & 1) || (status & 0x20)) return;
     uint8_t sc = arch_inb(KBD_DATA);
+
+    if (sc == 0x38) { alt_pressed = 1; return; }
+    if (sc == 0xB8) { alt_pressed = 0; return; }
     if (sc & 0x80) return;
 
-    /* Tab changes focus between the terminal and system information windows. */
     if (sc == 0x0f) {
         focused_window ^= 1u;
         draw_desktop();
+        if (alt_pressed) draw_switcher();
         return;
     }
     if (focused_window != 0) return;
@@ -276,8 +318,79 @@ static void keyboard_poll(void)
     }
 }
 
-static void framebuffer_init(void)
+#define MOUSE_STATUS 0x64
+#define MOUSE_DATA 0x60
+
+static int ps2_wait_input(void)
 {
+    for (unsigned i = 0; i < 100000; ++i) {
+        if (!(arch_inb(MOUSE_STATUS) & 2)) return 1;
+        __asm__ volatile ("pause");
+    }
+    return 0;
+}
+static int ps2_wait_output(void)
+{
+    for (unsigned i = 0; i < 100000; ++i) {
+        if (arch_inb(MOUSE_STATUS) & 1) return 1;
+        __asm__ volatile ("pause");
+    }
+    return 0;
+}
+static int mouse_write(uint8_t value)
+{
+    if (!ps2_wait_input()) return 0;
+    arch_outb(MOUSE_STATUS, 0xD4);
+    if (!ps2_wait_input()) return 0;
+    arch_outb(MOUSE_DATA, value);
+    return 1;
+}
+static int mouse_read_ack(void)
+{
+    if (!ps2_wait_output()) return 0;
+    return arch_inb(MOUSE_DATA) == 0xFA;
+}
+static void mouse_init(void)
+{
+    mouse_x = fb->width / 2;
+    mouse_y = fb->height / 2;
+    if (!ps2_wait_input()) {
+        serial_write("PS/2 mouse: controller busy\n");
+        return;
+    }
+    arch_outb(MOUSE_STATUS, 0xA8);
+    if (!mouse_write(0xF4) || !mouse_read_ack()) {
+        serial_write("PS/2 mouse: unavailable\n");
+        return;
+    }
+    serial_write("PS/2 mouse: polling enabled\n");
+}
+static void mouse_poll(void)
+{
+    uint8_t status = arch_inb(MOUSE_STATUS);
+    if (!(status & 1) || !(status & 0x20)) return;
+    uint8_t data = arch_inb(MOUSE_DATA);
+    if (mouse_packet_index == 0 && !(data & 0x08)) return;
+    mouse_packet[mouse_packet_index++] = data;
+    if (mouse_packet_index < 3) return;
+    mouse_packet_index = 0;
+    if (mouse_packet[0] & 0xC0) return;
+    int dx = (int)(int8_t)mouse_packet[1];
+    int dy = (int)(int8_t)mouse_packet[2];
+    int64_t nx = (int64_t)mouse_x + dx;
+    int64_t ny = (int64_t)mouse_y - dy;
+    if (nx < 0) nx = 0;
+    if (ny < 0) ny = 0;
+    if (nx >= (int64_t)fb->width) nx = (int64_t)fb->width - 1;
+    if (ny >= (int64_t)fb->height) ny = (int64_t)fb->height - 1;
+    if ((uint64_t)nx == mouse_x && (uint64_t)ny == mouse_y) return;
+    mouse_x = (uint64_t)nx;
+    mouse_y = (uint64_t)ny;
+    draw_desktop();
+}
+
+static void framebuffer_init(void)
+
     struct limine_framebuffer_response *response = framebuffer_request.response;
     if (!response || !response->framebuffer_count || !response->framebuffers ||
         !response->framebuffers[0]) {
@@ -305,11 +418,13 @@ void kernel_main(void)
     framebuffer_init();
     if (fb) {
         focused_window = 0;
+        mouse_init();
         draw_desktop();
         serial_write("CarsonWM: desktop ready\n");
         serial_write("CarsonShell: ready\n");
     }
     for (;;) {
+        mouse_poll();
         keyboard_poll();
         __asm__ volatile ("pause");
     }
