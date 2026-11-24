@@ -175,13 +175,13 @@ static void run_command(void)
     command[command_len] = 0;
     rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
     if (!command_len) { draw_input(); return; }
-    if (!__builtin_strcmp(command, "help")) {
+    if (command_is("help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
-    } else if (!__builtin_strcmp(command, "clear")) {
+    } else if (command_is("clear")) {
         rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
-    } else if (!__builtin_strcmp(command, "about")) {
+    } else if (command_is("about")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
         output_line("BUILT FROM SCRATCH.", 2, TEXT);
