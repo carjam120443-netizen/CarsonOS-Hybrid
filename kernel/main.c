@@ -227,21 +227,18 @@ static void draw_cursor(void)
 
 static void draw_switcher(void)
 {
-    const uint64_t widths[3] = {176, 216, 256};
-    const uint64_t heights[3] = {62, 76, 90};
-    for (unsigned frame = 0; frame < 3; ++frame) {
-        uint64_t w = widths[frame], h = heights[frame];
-        uint64_t x = fb->width > w ? (fb->width - w) / 2 : 0;
-        uint64_t y = fb->height > h ? (fb->height - h) / 2 : 0;
-        rect(x, y, w, h, ACCENT);
-        rect(x + 2, y + 2, w - 4, h - 4, PANEL);
-        text("ALT TAB", x + 14, y + 12, ACCENT, 1);
-        text(focused_window == 0 ? "CARSONSHELL" : "SYSTEM INFO",
-             x + 14, y + 36, TEXT, 1);
-        flush_framebuffer();
-        for (volatile unsigned delay = 0; delay < 1800000; ++delay)
-            __asm__ volatile ("pause");
-    }
+    /* Static overlay: no animation, delay loop, or intermediate flushes. */
+    const uint64_t w = 256;
+    const uint64_t h = 90;
+    uint64_t x = fb->width > w ? (fb->width - w) / 2 : 0;
+    uint64_t y = fb->height > h ? (fb->height - h) / 2 : 0;
+
+    rect(x, y, w, h, ACCENT);
+    rect(x + 2, y + 2, w - 4, h - 4, PANEL);
+    text("ALT TAB", x + 14, y + 12, ACCENT, 1);
+    text(focused_window == 0 ? "CARSONSHELL" : "SYSTEM INFO",
+         x + 14, y + 36, TEXT, 1);
+    flush_framebuffer();
 }
 
 static void draw_desktop(void)
