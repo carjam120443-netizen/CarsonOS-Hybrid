@@ -101,24 +101,35 @@ static void pixel(uint64_t x, uint64_t y, uint32_t color)
         p[i] = (uint8_t)(value >> (i * 8));
 }
 
-static void flush_framebuffer(void)
+static void flush_region(uint64_t x, uint64_t y, uint64_t w, uint64_t h)
 {
-    if (!fb || !backbuffer_enabled) return;
+    if (!fb || !backbuffer_enabled || x >= fb->width || y >= fb->height)
+        return;
+
+    uint64_t x_end = w > fb->width - x ? fb->width : x + w;
+    uint64_t y_end = h > fb->height - y ? fb->height : y + h;
     volatile uint8_t *base = (volatile uint8_t *)(uintptr_t)fb->address;
-    for (uint64_t y = 0; y < fb->height; ++y) {
-        for (uint64_t x = 0; x < fb->width; ++x) {
-            uint32_t color = backbuffer[y * fb->width + x];
+
+    for (uint64_t yy = y; yy < y_end; ++yy) {
+        for (uint64_t xx = x; xx < x_end; ++xx) {
+            uint32_t color = backbuffer[yy * fb->width + xx];
             uint32_t r = component((uint8_t)(color >> 16), fb->red_mask_size);
             uint32_t g = component((uint8_t)(color >> 8), fb->green_mask_size);
             uint32_t b = component((uint8_t)color, fb->blue_mask_size);
             uint32_t value = (r << fb->red_mask_shift) |
                              (g << fb->green_mask_shift) |
                              (b << fb->blue_mask_shift);
-            volatile uint8_t *p = base + y * fb->pitch + x * (fb->bpp / 8);
+            volatile uint8_t *p = base + yy * fb->pitch + xx * (fb->bpp / 8);
             for (uint16_t i = 0; i < fb->bpp / 8; ++i)
                 p[i] = (uint8_t)(value >> (i * 8));
         }
     }
+}
+
+static void flush_framebuffer(void)
+{
+    if (!fb || !backbuffer_enabled) return;
+    flush_region(0, 0, fb->width, fb->height);
 }
 static void rect(uint64_t x, uint64_t y, uint64_t w, uint64_t h, uint32_t c)
 {
@@ -189,6 +200,8 @@ static int alt_pressed;
 static uint64_t mouse_x, mouse_y;
 static uint8_t mouse_packet[3];
 static unsigned mouse_packet_index;
+static int left_button_down;
+static int app_menu_open;
 
 static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
                         const char *title, unsigned id)
@@ -201,12 +214,14 @@ static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
     text("X", x + w - 20, y + 10, MUTED, 1);
 }
 
-static void draw_input(void)
+static void draw_input(int present)
 {
     uint64_t y = term_y + term_h - 43;
     rect(term_x + 12, y, term_w - 24, 30, 0x0A1725);
     text("CARSONOS >", term_x + 22, y + 10, ACCENT, 1);
     text(command, term_x + 100, y + 10, TEXT, 1);
+    if (present)
+        flush_region(term_x + 12, y, term_w - 24, 30);
 }
 
 static void output_line(const char *s, unsigned row, uint32_t color)
@@ -241,6 +256,23 @@ static void draw_switcher(void)
     flush_framebuffer();
 }
 
+static uint64_t app_menu_x(void) { return 8; }
+static uint64_t app_menu_y(void) { return fb->height - 30 - 126; }
+
+static void draw_app_menu(void)
+{
+    if (!app_menu_open) return;
+    uint64_t x = app_menu_x();
+    uint64_t y = app_menu_y();
+
+    rect(x, y, 220, 126, ACCENT);
+    rect(x + 2, y + 2, 216, 122, PANEL);
+    text("BUILT IN APPS", x + 14, y + 12, ACCENT, 1);
+    rect(x + 8, y + 34, 204, 1, MUTED);
+    text("CARSONSHELL", x + 14, y + 48, TEXT, 1);
+    text("SYSTEM INFO", x + 14, y + 84, TEXT, 1);
+}
+
 static void draw_desktop(void)
 {
     rect(0, 0, fb->width, fb->height, BG);
@@ -268,7 +300,8 @@ static void draw_desktop(void)
     text("CARSONOS", 12, fb->height - 20, ACCENT, 1);
     text("TAB: SWITCH WINDOW", 120, fb->height - 20, MUTED, 1);
 
-    draw_input();
+    draw_app_menu();
+    draw_input(0);
     /* This lamp reports that the kernel is running, not measured CPU usage. */
     rect(fb->width > 104 ? fb->width - 104 : 0, fb->height - 21, 7, 7, 0x55D68B);
     text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
@@ -287,7 +320,7 @@ static void run_command(void)
 {
     command[command_len] = 0;
     rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
-    if (!command_len) { draw_input(); return; }
+    if (!command_len) { draw_input(1); return; }
     if (command_is("help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
@@ -303,7 +336,9 @@ static void run_command(void)
     }
     command_len = 0;
     command[0] = 0;
-    draw_input();
+    draw_input(0);
+    flush_region(term_x + 12, term_y + 54, term_w - 24, term_h - 110);
+    flush_region(term_x + 12, term_y + term_h - 43, term_w - 24, 30);
 }
 static char key_character(uint8_t sc)
 {
@@ -336,14 +371,14 @@ static void keyboard_poll(void)
     if (sc == 0x1c) { run_command(); return; }
     if (sc == 0x0e) {
         if (command_len) command[--command_len] = 0;
-        draw_input();
+        draw_input(0);
         return;
     }
     char ch = key_character(sc);
     if (ch && command_len < sizeof(command)-1) {
         command[command_len++] = ch;
         command[command_len] = 0;
-        draw_input();
+        draw_input(0);
     }
 }
 
@@ -411,6 +446,35 @@ static void mouse_init(void)
 
     serial_write("PS/2 mouse: polling enabled\n");
 }
+static void handle_mouse_click(void)
+{
+    uint64_t taskbar_y = fb->height - 30;
+    if (mouse_y >= taskbar_y && mouse_x < 100) {
+        app_menu_open = !app_menu_open;
+        return;
+    }
+
+    if (app_menu_open) {
+        uint64_t x = app_menu_x();
+        uint64_t y = app_menu_y();
+        if (mouse_x >= x && mouse_x < x + 220 &&
+            mouse_y >= y + 36 && mouse_y < y + 70) {
+            focused_window = 0;
+            app_menu_open = 0;
+            return;
+        }
+        if (mouse_x >= x && mouse_x < x + 220 &&
+            mouse_y >= y + 72 && mouse_y < y + 106) {
+            focused_window = 1;
+            app_menu_open = 0;
+            return;
+        }
+        if (mouse_x < x || mouse_x >= x + 220 ||
+            mouse_y < y || mouse_y >= y + 126)
+            app_menu_open = 0;
+    }
+}
+
 static void mouse_poll(void)
 {
     uint8_t status = arch_inb(MOUSE_STATUS);
@@ -421,6 +485,7 @@ static void mouse_poll(void)
     if (mouse_packet_index < 3) return;
     mouse_packet_index = 0;
     if (mouse_packet[0] & 0xC0) return;
+
     int dx = (int)(int8_t)mouse_packet[1];
     int dy = (int)(int8_t)mouse_packet[2];
     int64_t nx = (int64_t)mouse_x + dx;
@@ -429,10 +494,17 @@ static void mouse_poll(void)
     if (ny < 0) ny = 0;
     if (nx >= (int64_t)fb->width) nx = (int64_t)fb->width - 1;
     if (ny >= (int64_t)fb->height) ny = (int64_t)fb->height - 1;
-    if ((uint64_t)nx == mouse_x && (uint64_t)ny == mouse_y) return;
+
+    int moved = (uint64_t)nx != mouse_x || (uint64_t)ny != mouse_y;
     mouse_x = (uint64_t)nx;
     mouse_y = (uint64_t)ny;
-    draw_desktop();
+
+    int left_now = (mouse_packet[0] & 1) != 0;
+    int clicked = left_now && !left_button_down;
+    left_button_down = left_now;
+
+    if (clicked) handle_mouse_click();
+    if (moved || clicked) draw_desktop();
 }
 
 static void framebuffer_init(void)
