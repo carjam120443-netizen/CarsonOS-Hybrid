@@ -354,15 +354,32 @@ static void mouse_init(void)
 {
     mouse_x = fb->width / 2;
     mouse_y = fb->height / 2;
+    serial_write("PS/2 mouse: init entered\n");
+
     if (!ps2_wait_input()) {
-        serial_write("PS/2 mouse: controller busy\n");
+        serial_write("PS/2 mouse: controller busy before enable\n");
         return;
     }
+
     arch_outb(MOUSE_STATUS, 0xA8);
-    if (!mouse_write(0xF4) || !mouse_read_ack()) {
-        serial_write("PS/2 mouse: unavailable\n");
+    serial_write("PS/2 mouse: auxiliary port enable command sent\n");
+
+    if (!ps2_wait_input()) {
+        serial_write("PS/2 mouse: controller busy before device command\n");
         return;
     }
+
+    if (!mouse_write(0xF4)) {
+        serial_write("PS/2 mouse: could not send enable command\n");
+        return;
+    }
+    serial_write("PS/2 mouse: enable command sent\n");
+
+    if (!mouse_read_ack()) {
+        serial_write("PS/2 mouse: no ACK received\n");
+        return;
+    }
+
     serial_write("PS/2 mouse: polling enabled\n");
 }
 static void mouse_poll(void)
