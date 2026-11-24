@@ -1,0 +1,66 @@
+name: Build CarsonOS Hybrid ISO
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-iso:
+    name: Build x86_64 BIOS + UEFI ISO
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential nasm xorriso mtools
+
+      - name: Build kernel ELF
+        run: |
+          make clean
+          make CROSS=x86_64-linux-gnu-
+
+      - name: Fetch Limine binary release
+        run: |
+          git clone --depth=1 --branch=v12.x-binary \
+            https://github.com/limine-bootloader/limine.git limine
+          make -C limine
+
+      - name: Assemble bootable ISO
+        run: |
+          set -eux
+          mkdir -p iso_root/boot/limine iso_root/EFI/BOOT
+
+          cp build/kernel.elf iso_root/boot/kernel.elf
+          cp boot/limine.conf iso_root/boot/limine/limine.conf
+
+          cp limine/limine-bios.sys iso_root/boot/limine/
+          cp limine/limine-bios-cd.bin iso_root/boot/limine/
+          cp limine/limine-uefi-cd.bin iso_root/boot/limine/
+          cp limine/BOOTX64.EFI iso_root/EFI/BOOT/
+
+          xorriso -as mkisofs \
+            -R -r -J \
+            -b boot/limine/limine-bios-cd.bin \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            --efi-boot boot/limine/limine-uefi-cd.bin \
+            -efi-boot-part --efi-boot-image --protective-msdos-label \
+            iso_root -o CarsonOS-Hybrid-x86_64.iso
+
+          ./limine/limine bios-install CarsonOS-Hybrid-x86_64.iso
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CarsonOS-Hybrid-x86_64-ISO
+          path: CarsonOS-Hybrid-x86_64.iso
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
