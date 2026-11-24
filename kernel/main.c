@@ -306,8 +306,8 @@ void kernel_main(void)
     if (fb) {
         focused_window = 0;
         draw_desktop();
-        serial_write("CarsonWM: desktop ready\\n");
-        serial_write("CarsonShell: ready\\n");
+        serial_write("CarsonWM: desktop ready\n");
+        serial_write("CarsonShell: ready\n");
     }
     for (;;) {
         keyboard_poll();
