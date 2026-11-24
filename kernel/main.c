@@ -284,6 +284,7 @@ static void framebuffer_init(void)
         serial_write("Framebuffer: unavailable\n");
         return;
     }
+
     fb = response->framebuffers[0];
     if (!fb->address || !fb->width || !fb->height ||
         (fb->bpp != 24 && fb->bpp != 32) || fb->memory_model != 1) {
@@ -291,23 +292,6 @@ static void framebuffer_init(void)
         serial_write("Framebuffer: unsupported format\n");
         return;
     }
-
-    rect(0,0,fb->width,fb->height,BG);
-    uint64_t pw = fb->width > 900 ? 868 : fb->width - 32;
-    uint64_t px = (fb->width-pw)/2;
-    uint64_t py = fb->height > 500 ? (fb->height-420)/2 : 16;
-    rect(px,py,pw,4,ACCENT);
-    rect(px,py+4,pw,416,PANEL);
-
-    uint32_t scale = fb->width >= 800 ? 5 : 3;
-    uint64_t title_width = 8 * 6 * scale;
-    text("CARSONOS",(fb->width-title_width)/2,py+55,ACCENT,scale);
-    text("HYBRID KERNEL",px+32,py+145,TEXT,fb->width >= 800 ? 3 : 2);
-    rect(px+32,py+190,pw-64,2,ACCENT);
-    text("BOOT SUCCESSFUL",px+32,py+220,TEXT,2);
-    text("ARCH: X86_64",px+32,py+260,MUTED,2);
-    text("SERIAL: COM1 READY",px+32,py+290,MUTED,2);
-    text("EARLY DEVELOPMENT BUILD",px+32,py+350,ACCENT,1);
     serial_write("Framebuffer: initialized\n");
 }
 
