@@ -1,4 +1,4 @@
-CROSS ?= x86_64-elf-
+CROSS ?= x86_64-linux-gnu-
 CC := $(CROSS)gcc
 NASM ?= nasm
 BUILD := build
