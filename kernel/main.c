@@ -77,6 +77,17 @@ static void serial_write(const char *s)
         serial_write_char(*s++);
     }
 }
+static void serial_write_u64(uint64_t value)
+{
+    char digits[21];
+    unsigned count = 0;
+    if (value == 0) { serial_write_char('0'); return; }
+    while (value && count < sizeof(digits)) {
+        digits[count++] = (char)('0' + value % 10);
+        value /= 10;
+    }
+    while (count) serial_write_char(digits[--count]);
+}
 static uint32_t component(uint8_t value, uint8_t bits)
 {
     if (!bits || bits > 8) return 0;
@@ -303,29 +314,44 @@ static void draw_desktop(void)
     if (diagnose) serial_write("CarsonWM diagnostic: background painted\n");
     if (diagnose) serial_write("CarsonWM diagnostic: calculating window geometry\n");
 
+    if (diagnose) {
+        serial_write("CarsonWM geometry: framebuffer width="); serial_write_u64(fb->width);
+        serial_write(" height="); serial_write_u64(fb->height); serial_write("\n");
+    }
     term_x = 24;
     term_y = 42;
+    if (diagnose) serial_write("CarsonWM geometry: base position set\n");
     term_w = fb->width * 59 / 100;
-    if (term_w < 360) term_w = 360;
-    if (term_w > fb->width - 220) term_w = fb->width - 220;
-    term_h = fb->height - 86;
-    if (term_h < 230) term_h = fb->height - 50;
+    if (diagnose) { serial_write("CarsonWM geometry: initial terminal width="); serial_write_u64(term_w); serial_write("\n"); }
+    if (fb->width > 220 && term_w > fb->width - 220) term_w = fb->width - 220;
+    if (diagnose) { serial_write("CarsonWM geometry: terminal width bounded="); serial_write_u64(term_w); serial_write("\n"); }
+    if (term_w < 360 && fb->width >= 384) term_w = 360;
+    term_h = fb->height > 86 ? fb->height - 86 : fb->height;
+    if (diagnose) { serial_write("CarsonWM geometry: terminal height="); serial_write_u64(term_h); serial_write("\n"); }
+    if (term_h < 230 && fb->height > 50) term_h = fb->height - 50;
     info_x = term_x + term_w + 14;
-    info_w = fb->width - info_x - 24;
+    if (diagnose) { serial_write("CarsonWM geometry: info x="); serial_write_u64(info_x); serial_write("\n"); }
+    info_w = fb->width > info_x + 24 ? fb->width - info_x - 24 : 0;
+    if (diagnose) { serial_write("CarsonWM geometry: info width="); serial_write_u64(info_w); serial_write("\n"); }
 
     window_x[0] = term_x; window_y[0] = term_y;
     window_w[0] = term_w; window_h[0] = term_h;
     window_x[1] = info_x; window_y[1] = term_y + 36;
     window_w[1] = info_w; window_h[1] = 210;
+    if (diagnose) serial_write("CarsonWM geometry: default window bounds stored\n");
 
     if (window_maximized[0]) {
         window_x[0] = 8; window_y[0] = 8;
-        window_w[0] = fb->width - 16; window_h[0] = fb->height - 46;
+        window_w[0] = fb->width > 16 ? fb->width - 16 : fb->width;
+        window_h[0] = fb->height > 46 ? fb->height - 46 : fb->height;
     }
+    if (diagnose) serial_write("CarsonWM geometry: terminal maximize state applied\n");
     if (window_maximized[1]) {
         window_x[1] = 8; window_y[1] = 8;
-        window_w[1] = fb->width - 16; window_h[1] = fb->height - 46;
+        window_w[1] = fb->width > 16 ? fb->width - 16 : fb->width;
+        window_h[1] = fb->height > 46 ? fb->height - 46 : fb->height;
     }
+    if (diagnose) serial_write("CarsonWM geometry: system maximize state applied\n");
 
     /* Keep terminal content and input coordinates aligned when maximized. */
     term_x = window_x[0]; term_y = window_y[0];
