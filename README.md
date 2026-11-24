@@ -4,7 +4,7 @@
 
 The initial target is **x86_64 PCs**, with development and testing focused on virtual machines before any physical-hardware experiments.
 
-> **Project status:** Early planning and scaffolding. The kernel is not yet bootable, and the features below are goals rather than completed functionality.
+> **Project status:** Early kernel implementation. A minimal x86_64 kernel entry, serial logger, and NASM CPU helpers are now in place. Booting and ISO generation still need to be wired up and tested.
 
 ## Project goals
 
@@ -81,7 +81,7 @@ Typical tools include:
 - xorriso and mtools
 - QEMU and GDB
 
-The exact dependency list and build instructions will be documented once the first kernel build is implemented.
+The initial kernel ELF can be built with `make` using an `x86_64-elf` GCC cross-compiler and NASM. Run `make clean` to remove generated objects and the ELF. This currently builds the kernel ELF only; the Limine boot files and ISO target are not wired up yet.
 
 ## Current roadmap
 
