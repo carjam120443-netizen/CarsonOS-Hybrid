@@ -152,20 +152,64 @@ static void text(const char *s, uint64_t x, uint64_t y,
 #define KBD_STATUS 0x64
 static char command[64];
 static unsigned command_len;
-static void draw_terminal_text(const char *s, uint64_t x, uint64_t y, uint32_t color)
+static uint64_t term_x, term_y, term_w, term_h;
+static uint64_t info_x, info_w;
+static unsigned focused_window;
+
+static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
+                        const char *title, unsigned id)
 {
-    text(s, x, y, color, 2);
+    uint32_t border = focused_window == id ? ACCENT : MUTED;
+    rect(x, y, w, h, border);
+    rect(x + 2, y + 2, w - 4, h - 4, PANEL);
+    rect(x + 2, y + 2, w - 4, 25, focused_window == id ? 0x19364A : 0x172536);
+    text(title, x + 12, y + 10, focused_window == id ? ACCENT : TEXT, 1);
+    text("X", x + w - 20, y + 10, MUTED, 1);
 }
+
 static void draw_input(void)
 {
-    rect(150, 610, fb->width > 500 ? fb->width - 300 : fb->width - 40, 34, PANEL);
-    draw_terminal_text("CARSONOS", 170, 620, ACCENT);
-    draw_terminal_text(command, 290, 620, TEXT);
+    uint64_t y = term_y + term_h - 43;
+    rect(term_x + 12, y, term_w - 24, 30, 0x0A1725);
+    text("CARSONOS >", term_x + 22, y + 10, ACCENT, 1);
+    text(command, term_x + 100, y + 10, TEXT, 1);
 }
+
 static void output_line(const char *s, unsigned row, uint32_t color)
 {
-    draw_terminal_text(s, 170, 470 + row * 28, color);
+    text(s, term_x + 20, term_y + 66 + row * 26, color, 2);
 }
+
+static void draw_desktop(void)
+{
+    rect(0, 0, fb->width, fb->height, BG);
+
+    term_x = 24;
+    term_y = 42;
+    term_w = fb->width * 59 / 100;
+    if (term_w < 360) term_w = 360;
+    if (term_w > fb->width - 220) term_w = fb->width - 220;
+    term_h = fb->height - 86;
+    if (term_h < 230) term_h = fb->height - 50;
+    info_x = term_x + term_w + 14;
+    info_w = fb->width - info_x - 24;
+
+    draw_window(term_x, term_y, term_w, term_h, "CARSONSHELL - TERMINAL", 0);
+    draw_window(info_x, term_y + 36, info_w, 210, "SYSTEM INFO", 1);
+
+    text("CARSONOS HYBRID", info_x + 12, term_y + 94, ACCENT, 1);
+    text("KERNEL: X86_64", info_x + 12, term_y + 122, TEXT, 1);
+    text("BOOT: LIMINE", info_x + 12, term_y + 150, TEXT, 1);
+    text("SHELL: READY", info_x + 12, term_y + 178, TEXT, 1);
+
+    rect(0, fb->height - 30, fb->width, 30, 0x101E30);
+    rect(0, fb->height - 30, fb->width, 2, ACCENT);
+    text("CARSONOS", 12, fb->height - 20, ACCENT, 1);
+    text("TAB: SWITCH WINDOW", 120, fb->height - 20, MUTED, 1);
+
+    draw_input();
+}
+
 static int command_is(const char *expected)
 {
     unsigned i = 0;
@@ -175,14 +219,14 @@ static int command_is(const char *expected)
 static void run_command(void)
 {
     command[command_len] = 0;
-    rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
+    rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
     if (!command_len) { draw_input(); return; }
     if (command_is("help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
     } else if (command_is("clear")) {
-        rect(150, 450, fb->width > 500 ? fb->width - 300 : fb->width - 40, 150, PANEL);
+        rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
     } else if (command_is("about")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
@@ -269,19 +313,10 @@ void kernel_main(void)
     serial_write("Boot status: kernel entry reached\n");
     framebuffer_init();
     if (fb) {
-        rect(0,0,fb->width,fb->height,BG);
-        uint64_t pw = fb->width > 900 ? 868 : fb->width - 32;
-        uint64_t px = (fb->width-pw)/2;
-        uint64_t py = fb->height > 500 ? (fb->height-420)/2 : 16;
-        rect(px,py,pw,4,ACCENT);
-        rect(px,py+4,pw,416,PANEL);
-        uint32_t title_scale = fb->width >= 800 ? 5 : 3;
-        text("CARSONOS",(fb->width-8*6*title_scale)/2,py+35,ACCENT,title_scale);
-        text("CARSONSHELL - TERMINAL",px+32,py+145,TEXT,2);
-        text("TYPE HELP TO GET STARTED",px+32,py+190,MUTED,2);
-        text("HELP   CLEAR   ABOUT",px+32,py+230,ACCENT,2);
-        draw_input();
-        serial_write("CarsonShell: ready\n");
+        focused_window = 0;
+        draw_desktop();
+        serial_write("CarsonWM: desktop ready\\n");
+        serial_write("CarsonShell: ready\\n");
     }
     for (;;) {
         keyboard_poll();
