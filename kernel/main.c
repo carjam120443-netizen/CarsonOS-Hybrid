@@ -202,6 +202,10 @@ static uint8_t mouse_packet[3];
 static unsigned mouse_packet_index;
 static int left_button_down;
 static int app_menu_open;
+static int window_visible[2] = {1, 1};
+static int window_minimized[2];
+static int window_maximized[2];
+static uint64_t window_x[2], window_y[2], window_w[2], window_h[2];
 
 static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
                         const char *title, unsigned id)
@@ -211,7 +215,13 @@ static void draw_window(uint64_t x, uint64_t y, uint64_t w, uint64_t h,
     rect(x + 2, y + 2, w - 4, h - 4, PANEL);
     rect(x + 2, y + 2, w - 4, 25, focused_window == id ? 0x19364A : 0x172536);
     text(title, x + 12, y + 10, focused_window == id ? ACCENT : TEXT, 1);
-    text("X", x + w - 20, y + 10, MUTED, 1);
+
+    /* Window controls: minimize, maximize/restore, close. */
+    uint64_t controls_x = x + w - 66;
+    text("-", controls_x + 5, y + 10, TEXT, 1);
+    rect(controls_x + 25, y + 9, 10, 10, TEXT);
+    rect(controls_x + 27, y + 11, 6, 6, 0x172536);
+    text("X", controls_x + 47, y + 10, TEXT, 1);
 }
 
 static void draw_input(int present)
@@ -287,13 +297,35 @@ static void draw_desktop(void)
     info_x = term_x + term_w + 14;
     info_w = fb->width - info_x - 24;
 
-    draw_window(term_x, term_y, term_w, term_h, "CARSONSHELL - TERMINAL", 0);
-    draw_window(info_x, term_y + 36, info_w, 210, "SYSTEM INFO", 1);
+    window_x[0] = term_x; window_y[0] = term_y;
+    window_w[0] = term_w; window_h[0] = term_h;
+    window_x[1] = info_x; window_y[1] = term_y + 36;
+    window_w[1] = info_w; window_h[1] = 210;
 
-    text("CARSONOS HYBRID", info_x + 12, term_y + 94, ACCENT, 1);
-    text("KERNEL: X86_64", info_x + 12, term_y + 122, TEXT, 1);
-    text("BOOT: LIMINE", info_x + 12, term_y + 150, TEXT, 1);
-    text("SHELL: READY", info_x + 12, term_y + 178, TEXT, 1);
+    if (window_maximized[0]) {
+        window_x[0] = 8; window_y[0] = 8;
+        window_w[0] = fb->width - 16; window_h[0] = fb->height - 46;
+    }
+    if (window_maximized[1]) {
+        window_x[1] = 8; window_y[1] = 8;
+        window_w[1] = fb->width - 16; window_h[1] = fb->height - 46;
+    }
+
+    if (window_visible[0] && !window_minimized[0])
+        draw_window(window_x[0], window_y[0], window_w[0], window_h[0],
+                    "CARSONSHELL - TERMINAL", 0);
+    if (window_visible[1] && !window_minimized[1])
+        draw_window(window_x[1], window_y[1], window_w[1], window_h[1],
+                    "SYSTEM INFO", 1);
+
+    /* Keep the system information panel free of the duplicate CarsonOS label. */
+    if (window_visible[1] && !window_minimized[1]) {
+        uint64_t ix = window_x[1] + 12;
+        uint64_t iy = window_y[1] + 62;
+        text("KERNEL: X86_64", ix, iy, TEXT, 1);
+        text("BOOT: LIMINE", ix, iy + 28, TEXT, 1);
+        text("SHELL: READY", ix, iy + 56, TEXT, 1);
+    }
 
     rect(0, fb->height - 30, fb->width, 30, 0x101E30);
     rect(0, fb->height - 30, fb->width, 2, ACCENT);
@@ -301,7 +333,8 @@ static void draw_desktop(void)
     text("TAB: SWITCH WINDOW", 120, fb->height - 20, MUTED, 1);
 
     draw_app_menu();
-    draw_input(0);
+    if (window_visible[0] && !window_minimized[0])
+        draw_input(0);
     /* This lamp reports that the kernel is running, not measured CPU usage. */
     rect(fb->width > 104 ? fb->width - 104 : 0, fb->height - 21, 7, 7, 0x55D68B);
     text("CPU ACTIVE", fb->width > 91 ? fb->width - 91 : 0,
@@ -366,7 +399,7 @@ static void keyboard_poll(void)
         if (alt_pressed) draw_switcher();
         return;
     }
-    if (focused_window != 0) return;
+    if (focused_window != 0 || !window_visible[0] || window_minimized[0]) return;
 
     if (sc == 0x1c) { run_command(); return; }
     if (sc == 0x0e) {
@@ -448,6 +481,32 @@ static void mouse_init(void)
 }
 static void handle_mouse_click(void)
 {
+    /* Check title-bar controls before ordinary window focus. */
+    for (unsigned id = 0; id < 2; ++id) {
+        if (!window_visible[id] || window_minimized[id]) continue;
+        uint64_t x = window_x[id], y = window_y[id];
+        uint64_t w = window_w[id];
+        if (mouse_x >= x + w - 68 && mouse_x < x + w &&
+            mouse_y >= y + 2 && mouse_y < y + 27) {
+            uint64_t local_x = mouse_x - (x + w - 68);
+            if (local_x < 22) {
+                window_minimized[id] = 1;
+            } else if (local_x < 44) {
+                window_maximized[id] = !window_maximized[id];
+            } else {
+                window_visible[id] = 0;
+                window_minimized[id] = 0;
+            }
+            focused_window = id;
+            return;
+        }
+        if (mouse_x >= x && mouse_x < x + w &&
+            mouse_y >= y && mouse_y < y + 27) {
+            focused_window = id;
+            return;
+        }
+    }
+
     uint64_t taskbar_y = fb->height - 30;
     if (mouse_y >= taskbar_y && mouse_x < 100) {
         app_menu_open = !app_menu_open;
@@ -460,12 +519,16 @@ static void handle_mouse_click(void)
         if (mouse_x >= x && mouse_x < x + 220 &&
             mouse_y >= y + 36 && mouse_y < y + 70) {
             focused_window = 0;
+            window_visible[0] = 1;
+            window_minimized[0] = 0;
             app_menu_open = 0;
             return;
         }
         if (mouse_x >= x && mouse_x < x + 220 &&
             mouse_y >= y + 72 && mouse_y < y + 106) {
             focused_window = 1;
+            window_visible[1] = 1;
+            window_minimized[1] = 0;
             app_menu_open = 0;
             return;
         }
