@@ -407,7 +407,7 @@ static void mouse_poll(void)
 }
 
 static void framebuffer_init(void)
-
+{
     struct limine_framebuffer_response *response = framebuffer_request.response;
     if (!response || !response->framebuffer_count || !response->framebuffers ||
         !response->framebuffers[0]) {
