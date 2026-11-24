@@ -311,6 +311,10 @@ static void draw_desktop(void)
         window_w[1] = fb->width - 16; window_h[1] = fb->height - 46;
     }
 
+    /* Keep terminal content and input coordinates aligned when maximized. */
+    term_x = window_x[0]; term_y = window_y[0];
+    term_w = window_w[0]; term_h = window_h[0];
+
     if (window_visible[0] && !window_minimized[0])
         draw_window(window_x[0], window_y[0], window_w[0], window_h[0],
                     "CARSONSHELL - TERMINAL", 0);
