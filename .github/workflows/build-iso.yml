@@ -36,8 +36,9 @@ jobs:
             -o /tmp/limine-binary.tar.gz
           tar -xzf /tmp/limine-binary.tar.gz -C limine
 
-          LIMINE_DIR="$(dirname "$(find limine -type f -name limine-bios.sys -print -quit)")"
-          test -n "$LIMINE_DIR"
+          LIMINE_SYS="$(find limine -type f -name limine-bios.sys -print -quit)"
+          test -n "$LIMINE_SYS"
+          LIMINE_DIR="$(dirname "$LIMINE_SYS")"
           echo "LIMINE_DIR=$LIMINE_DIR" >> "$GITHUB_ENV"
           make -C "$LIMINE_DIR"
 
