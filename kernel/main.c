@@ -334,11 +334,23 @@ static void draw_desktop(void)
     info_w = fb->width > info_x + 24 ? fb->width - info_x - 24 : 0;
     if (diagnose) { serial_write("CarsonWM geometry: info width="); serial_write_u64(info_w); serial_write("\n"); }
 
-    window_x[0] = term_x; window_y[0] = term_y;
-    window_w[0] = term_w; window_h[0] = term_h;
-    window_x[1] = info_x; window_y[1] = term_y + 36;
-    window_w[1] = info_w; window_h[1] = 210;
-    if (diagnose) serial_write("CarsonWM geometry: default window bounds stored\n");
+    if (diagnose) serial_write("CarsonWM geometry: storing terminal X\\n");
+    window_x[0] = term_x;
+    if (diagnose) serial_write("CarsonWM geometry: storing terminal Y\\n");
+    window_y[0] = term_y;
+    if (diagnose) serial_write("CarsonWM geometry: storing terminal width\\n");
+    window_w[0] = term_w;
+    if (diagnose) serial_write("CarsonWM geometry: storing terminal height\\n");
+    window_h[0] = term_h;
+    if (diagnose) serial_write("CarsonWM geometry: storing info X\\n");
+    window_x[1] = info_x;
+    if (diagnose) serial_write("CarsonWM geometry: storing info Y\\n");
+    window_y[1] = term_y + 36;
+    if (diagnose) serial_write("CarsonWM geometry: storing info width\\n");
+    window_w[1] = info_w;
+    if (diagnose) serial_write("CarsonWM geometry: storing info height\\n");
+    window_h[1] = 210;
+    if (diagnose) serial_write("CarsonWM geometry: default window bounds stored\\n");
 
     if (window_maximized[0]) {
         window_x[0] = 8; window_y[0] = 8;
