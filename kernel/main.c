@@ -579,32 +579,42 @@ static char key_character(uint8_t sc)
         [10]='9',[11]='0',[12]='-',[13]='=',[16]='q',[17]='w',[18]='e',
         [19]='r',[20]='t',[21]='y',[22]='u',[23]='i',[24]='o',[25]='p',
         [26]='[',[27]=']',[30]='a',[31]='s',[32]='d',[33]='f',[34]='g',
-        [35]='h',[36]='j',[37]='k',[38]='l',[39]=';',[40]='\\'',
-        [41]='`',[43]='\\\\',[44]='z',[45]='x',[46]='c',[47]='v',
+        [35]='h',[36]='j',[37]='k',[38]='l',[39]=';',[40]='\'',
+        [41]='\`',[43]='\\',[44]='z',[45]='x',[46]='c',[47]='v',
         [48]='b',[49]='n',[50]='m',[51]=',',[52]='.',[53]='/',[57]=' '
     };
-    char ch=sc<58?keys[sc]:0;
-    if (shift_pressed) {
-        if (ch >= 'a' && ch <= 'z') ch=(char)(ch-('a'-'A'));
-        else {
-            switch (ch) {
-                case '1': ch='!'; break; case '2': ch='@'; break;
-                case '3': ch='#'; break; case '4': ch='
+    char ch = sc < 58 ? keys[sc] : 0;
+    if (!shift_pressed) return ch;
+
+    if (ch >= 'a' && ch <= 'z') return (char)(ch - ('a' - 'A'));
+    switch (ch) {
+        case '1': return '!'; case '2': return '@'; case '3': return '#';
+        case '4': return '$'; case '5': return '%'; case '6': return '^';
+        case '7': return '&'; case '8': return '*'; case '9': return '(';
+        case '0': return ')'; case '-': return '_'; case '=': return '+';
+        case '[': return '{'; case ']': return '}';
+        case ';': return ':'; case '\'': return '"'; case '\`': return '~';
+        case '\\': return '|'; case ',': return '<'; case '.': return '>';
+        case '/': return '?';
+        default: return ch;
+    }
+}
+
 static void keyboard_poll(void)
 {
-    uint8_t status=arch_inb(KBD_STATUS);
-    if(!(status&1))return;
-    if(status&0x20){(void)arch_inb(KBD_DATA);return;}
-    if(!keyboard_ready)return;
+    uint8_t status = arch_inb(KBD_STATUS);
+    if (!(status & 1)) return;
+    if (status & 0x20) { (void)arch_inb(KBD_DATA); return; }
+    if (!keyboard_ready) return;
+
     uint8_t sc = arch_inb(KBD_DATA);
+    if (sc == 0x38) { alt_pressed = 1; return; }
+    if (sc == 0xB8) { alt_pressed = 0; draw_desktop(); return; }
+    if (sc == 0x2A || sc == 0x36) { shift_pressed = 1; return; }
+    if (sc == 0xAA || sc == 0xB6) { shift_pressed = 0; return; }
+    if (sc & 0x80) return;
 
-    if(sc==0x38){alt_pressed=1;return;}
-    if(sc==0xB8){alt_pressed=0;draw_desktop();return;}
-    if(sc==0x2A||sc==0x36){shift_pressed=1;return;}
-    if(sc==0xAA||sc==0xB6){shift_pressed=0;return;}
-    if(sc&0x80)return;
-
-    if (sc == 0x0f) {
+    if (sc == 0x0F) {
         focused_window ^= 1u;
         draw_desktop();
         if (alt_pressed) draw_switcher();
@@ -612,14 +622,14 @@ static void keyboard_poll(void)
     }
     if (focused_window != 0 || !window_visible[0] || window_minimized[0]) return;
 
-    if (sc == 0x1c) { run_command(); return; }
-    if (sc == 0x0e) {
+    if (sc == 0x1C) { run_command(); return; }
+    if (sc == 0x0E) {
         if (command_len) command[--command_len] = 0;
         draw_input(1);
         return;
     }
     char ch = key_character(sc);
-    if (ch && command_len < sizeof(command)-1) {
+    if (ch && command_len < sizeof(command) - 1) {
         command[command_len++] = ch;
         command[command_len] = 0;
         draw_input(1);
@@ -806,8 +816,8 @@ static void mouse_poll(void)
 
     int dx = (int)(int8_t)mouse_packet[1];
     int dy = (int)(int8_t)mouse_packet[2];
-    int64_t nx = (int64_t)mouse_x + dx;
-    int64_t ny = (int64_t)mouse_y - dy;
+    int64_t nx = (int64_t)mouse_x - dx;
+    int64_t ny = (int64_t)mouse_y + dy;
     if (nx < 0) nx = 0;
     if (ny < 0) ny = 0;
     if (nx >= (int64_t)fb->width) nx = (int64_t)fb->width - 1;
