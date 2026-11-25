@@ -1,34 +1,43 @@
 # carpkg
 
-CarsonOS's native package manager.
+CarsonOS has two related interfaces:
 
-## Planned commands
+1. The in-OS `carpkg` shell commands for reading the mounted package catalog.
+2. The host-side `tools/carpkg.py` utility for repository maintenance and ISO builds.
+
+## Host-side subcommands
+
+```sh
+python3 tools/carpkg.py help
+python3 tools/carpkg.py repo
+python3 tools/carpkg.py list
+python3 tools/carpkg.py validate
+python3 tools/carpkg.py update
+python3 tools/carpkg.py build-iso --limine-dir /path/to/limine
+```
+
+`update` fetches the Git remote configured in `packages/repository.json`
+and replaces only the local `packages/` directory after validation.
+`build-iso` embeds that same directory at `/PACKAGES` in the bootable ISO.
+
+## In-OS commands
 
 - `carpkg help`
-- `carpkg search <term>`
+- `carpkg repo`
 - `carpkg list`
-- `carpkg info <package>`
-- `carpkg install <package>`
-- `carpkg remove <package>`
+- `carpkg search`
+- `carpkg installed`
+- `carpkg install`
+- `carpkg remove`
 - `carpkg update`
 - `carpkg upgrade`
-- `carpkg installed`
 
-## Package format
+The in-OS catalog reader currently reads `PACKAGES/INDEX.JSON` from a
+mounted FAT32 data volume. The package directory is included in the ISO, but
+the kernel still needs an ISO9660 reader or Limine module integration to read
+that embedded copy directly. The E1000 driver is not yet a TCP/TLS/HTTPS stack,
+so in-OS repository downloads are not enabled. Use the host-side `update`
+subcommand until the kernel networking and storage layers are complete.
 
-Package metadata lives under `packages/`. Repository indexes live under
-`repos/`. The stable repository is described by
-`repos/stable/index.json`.
-
-The initial implementation must distinguish catalog operations from system
-operations. Search and metadata inspection can work before disk and network
-drivers exist. Install, remove, update, and upgrade must not report success
-until persistent filesystem writes and repository transport are implemented.
-
-## Security requirements
-
-- Validate package names and paths; never trust repository-provided paths.
-- Verify package hashes before extraction.
-- Reject path traversal and writes outside the package destination.
-- Do not execute package scripts as kernel code.
-- Keep package metadata separate from package payloads.
+Package installation/removal remains disabled until persistent filesystem
+writes, package hash verification, and safe extraction are implemented.

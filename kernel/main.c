@@ -584,12 +584,12 @@ static void run_command(void)
         output_line("CARPKG HELP", 0, ACCENT);
         output_line("LIST SEARCH REPO INSTALLED", 1, TEXT);
         output_line("INSTALL/REMOVE NOT READY", 2, TEXT);
-        output_line("UPDATE/UPGRADE NOT READY", 3, TEXT);
-        output_line("CATALOG: repos/stable", 4, TEXT);
+        output_line("UPDATE: USE HOST CARPKG TOOL", 3, TEXT);
+        output_line("CONFIG: PACKAGES/REPOSITORY.JSON", 4, TEXT);
     } else if (command_is("carpkg repo")) {
         output_line("REPO: CARSONOS-STABLE", 0, ACCENT);
-        output_line("SOURCE: repos/stable/index.json", 1, TEXT);
-        output_line("CATALOG: packages/index.json", 2, TEXT);
+        output_line("GIT: CARJAM120443-NETIZEN/CARSONOS-HYBRID", 1, TEXT);
+        output_line("CATALOG: PACKAGES/INDEX.JSON", 2, TEXT);
     } else if (command_is("carpkg list") || command_is("carpkg search")) {
         uint32_t catalog_size = 0;
         if (!fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
@@ -631,8 +631,8 @@ static void run_command(void)
         output_line("PERSISTENT STORAGE REQUIRED", 1, TEXT);
     } else if (command_is("carpkg install") || command_is("carpkg remove") ||
                command_is("carpkg update") || command_is("carpkg upgrade")) {
-        output_line("PACKAGE OPERATION DISABLED", 0, MUTED);
-        output_line("NETWORK + VERIFIED STORAGE NEEDED", 1, TEXT);
+        output_line("PACKAGE OPERATION NOT AVAILABLE", 0, MUTED);
+        output_line("NEEDS TCP/TLS + WRITABLE FS", 1, TEXT);
     } else if (command_is("test_panic")) {
         struct exception_frame test = {0};
         test.vector = 3; /* Synthetic breakpoint exception; no CPU fault is executed. */

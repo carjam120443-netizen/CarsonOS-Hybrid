@@ -1,0 +1,7 @@
+{
+  "repository": "carsonos-stable",
+  "git_url": "https://github.com/carjam120443-netizen/CarsonOS-Hybrid.git",
+  "branch": "main",
+  "catalog": "packages/index.json",
+  "iso_path": "PACKAGES"
+}

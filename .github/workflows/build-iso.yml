@@ -22,6 +22,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential nasm xorriso mtools
 
+      - name: Validate package repository
+        run: python3 tools/carpkg.py validate
+
       - name: Build kernel ELF
         run: |
           make clean
@@ -31,8 +34,8 @@ jobs:
         run: |
           set -eux
           mkdir -p limine
-          curl -fL \
-            https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.gz \
+          curl -fL \\
+            https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.gz \\
             -o /tmp/limine-binary.tar.gz
           tar -xzf /tmp/limine-binary.tar.gz -C limine
 
@@ -42,28 +45,13 @@ jobs:
           echo "LIMINE_DIR=$LIMINE_DIR" >> "$GITHUB_ENV"
           make -C "$LIMINE_DIR"
 
-      - name: Assemble bootable ISO
+      - name: Assemble bootable ISO with package repository
         run: |
           set -eux
-          mkdir -p iso_root/boot/limine iso_root/EFI/BOOT
-
-          cp build/kernel.elf iso_root/boot/kernel.elf
-          cp boot/limine.conf iso_root/boot/limine/limine.conf
-
-          cp "$LIMINE_DIR/limine-bios.sys" iso_root/boot/limine/
-          cp "$LIMINE_DIR/limine-bios-cd.bin" iso_root/boot/limine/
-          cp "$LIMINE_DIR/limine-uefi-cd.bin" iso_root/boot/limine/
-          cp "$LIMINE_DIR/BOOTX64.EFI" iso_root/EFI/BOOT/
-
-          xorriso -as mkisofs \
-            -R -r -J \
-            -b boot/limine/limine-bios-cd.bin \
-            -no-emul-boot -boot-load-size 4 -boot-info-table \
-            --efi-boot boot/limine/limine-uefi-cd.bin \
-            -efi-boot-part --efi-boot-image --protective-msdos-label \
-            iso_root -o CarsonOS-Hybrid-x86_64.iso
-
-          "$LIMINE_DIR/limine" bios-install CarsonOS-Hybrid-x86_64.iso
+          python3 tools/carpkg.py build-iso \\
+            --kernel build/kernel.elf \\
+            --limine-dir "$LIMINE_DIR" \\
+            --output CarsonOS-Hybrid-x86_64.iso
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
