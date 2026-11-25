@@ -604,7 +604,8 @@ static void keyboard_poll(void)
 {
     uint8_t status = arch_inb(KBD_STATUS);
     if (!(status & 1)) return;
-    if (status & 0x20) { (void)arch_inb(KBD_DATA); return; }
+    /* Mouse bytes belong to mouse_poll; never consume AUX data here. */
+    if (status & 0x20) return;
     if (!keyboard_ready) return;
 
     uint8_t sc = arch_inb(KBD_DATA);
@@ -816,7 +817,7 @@ static void mouse_poll(void)
 
     int dx = (int)(int8_t)mouse_packet[1];
     int dy = (int)(int8_t)mouse_packet[2];
-    int64_t nx = (int64_t)mouse_x - dx;
+    int64_t nx = (int64_t)mouse_x + dx;
     int64_t ny = (int64_t)mouse_y - dy;
     if (nx < 0) nx = 0;
     if (ny < 0) ny = 0;
