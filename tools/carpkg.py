@@ -129,13 +129,20 @@ def cmd_update(_args):
         # Keep the locally selected remote/branch; the fetched catalog must not
         # silently replace the user's repository configuration.
         shutil.copy2(CONFIG, downloaded / "repository.json")
-        backup = temp / "old-packages"
-        os.replace(PACKAGES, backup)
+        stage_parent = Path(tempfile.mkdtemp(prefix=".carpkg-update-stage-", dir=ROOT))
+        staged = stage_parent / "packages"
+        backup = stage_parent / "old-packages"
         try:
-            os.replace(downloaded, PACKAGES)
-        except Exception:
-            os.replace(backup, PACKAGES)
-            raise
+            # Stage on the same filesystem as packages/ so the final rename is atomic.
+            shutil.copytree(downloaded, staged)
+            os.replace(PACKAGES, backup)
+            try:
+                os.replace(staged, PACKAGES)
+            except Exception:
+                os.replace(backup, PACKAGES)
+                raise
+        finally:
+            shutil.rmtree(stage_parent, ignore_errors=True)
     print(f"Updated {REPO_NAME} package folder from {cfg['git_url']} ({cfg['branch']})")
 
 

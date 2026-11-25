@@ -1,7 +1,0 @@
-{
-  "repository": "carsonos-stable",
-  "format_version": 1,
-  "index": "../../packages/index.json",
-  "transport": "https",
-  "status": "catalog-bootstrap"
-}
