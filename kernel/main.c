@@ -6,6 +6,7 @@
 #include "include/ata.h"
 #include "include/fat32.h"
 #include "../build/generated/package_catalog.h"
+#include "../userland/init/carson_init.h"
 
 struct limine_framebuffer {
     uint64_t address, width, height, pitch;
@@ -1154,9 +1155,11 @@ void kernel_main(void)
     serial_init();
     serial_write("\nCarsonOS Hybrid\n");
     serial_write("Boot status: kernel entry reached\n");
+    carson_init_begin(serial_write);
     idt_init();
     serial_write("IDT: 32 exception gates installed\n");
     memory_init();
+    carson_init_report("memory manager", 1);
     serial_write("Memory map: usable bytes=");
     serial_write_u64(memory_usable_bytes());
     serial_write("\nMemory map: regions=");
@@ -1168,11 +1171,19 @@ void kernel_main(void)
         serial_write("ATA: primary-master disk detected, sectors=");
         serial_write_u64(ata_sector_count());
         serial_write("\n");
-        if (fs_init()) serial_write("Filesystem: FAT32 mounted read-only\n");
-        else { serial_write("Filesystem: "); serial_write(fs_status()); serial_write("\n"); }
+        if (fs_init()) {
+            serial_write("Filesystem: FAT32 mounted read-only\n");
+            carson_init_report("FAT32 filesystem", 1);
+        } else {
+            serial_write("Filesystem: "); serial_write(fs_status()); serial_write("\n");
+            carson_init_report("FAT32 filesystem", 0);
+        }
+        carson_init_report("ATA storage", 1);
     } else {
         serial_write("ATA: primary-master disk not detected\n");
         (void)fs_init();
+        carson_init_report("ATA storage", 0);
+        carson_init_report("FAT32 filesystem", 0);
     }
     struct pci_device_info netdev;
     if (pci_find_e1000(&netdev)) {
@@ -1193,19 +1204,34 @@ void kernel_main(void)
          * mapper is implemented.
          */
         serial_write("E1000: detected; MMIO mapping unavailable, driver deferred\n");
+        carson_init_report("PCI device discovery", 1);
+        carson_init_report("E1000 networking", 0);
     } else {
         serial_write("PCI: Intel 82540EM not found\n");
+        carson_init_report("PCI device discovery", 1);
+        carson_init_report("E1000 networking", 0);
     }
     framebuffer_init();
+    carson_init_report("framebuffer display", fb != 0);
     if (fb) {
         focused_window = 0;
         keyboard_init();
         mouse_init();
+        carson_init_report("PS/2 keyboard", keyboard_ready);
+        carson_init_report("PS/2 mouse", mouse_ready);
         serial_write("CarsonWM diagnostic: input initialization returned\n");
         draw_desktop();
         serial_write("CarsonWM: desktop ready\n");
+        carson_init_report("CarsonWM desktop", 1);
         serial_write("CarsonShell: ready\n");
+        carson_init_report("CarsonShell command handler", 1);
+    } else {
+        carson_init_report("PS/2 keyboard", 0);
+        carson_init_report("PS/2 mouse", 0);
+        carson_init_report("CarsonWM desktop", 0);
+        carson_init_report("CarsonShell command handler", 0);
     }
+    carson_init_finish();
     for (;;) {
         e1000_poll();
         mouse_poll();

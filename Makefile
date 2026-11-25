@@ -7,7 +7,7 @@ LIMINE_DIR ?= limine
 ISO := CarsonOS-Hybrid-x86_64.iso
 PACKAGE_HEADER := $(BUILD)/generated/package_catalog.h
 
-C_SOURCES := kernel/main.c kernel/mm/memory.c kernel/drivers/pci/pci.c kernel/drivers/net/e1000.c kernel/drivers/storage/ata.c kernel/fs/fat32.c
+C_SOURCES := kernel/main.c kernel/mm/memory.c kernel/drivers/pci/pci.c kernel/drivers/net/e1000.c kernel/drivers/storage/ata.c kernel/fs/fat32.c userland/init/carson_init.c
 ASM_SOURCES := kernel/arch/x86_64/entry.asm kernel/arch/x86_64/cpu.asm kernel/arch/x86_64/interrupts.asm
 C_OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES))
 ASM_OBJECTS := $(patsubst %.asm,$(BUILD)/%.o,$(ASM_SOURCES))

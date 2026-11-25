@@ -5,6 +5,7 @@ SECTION .text
 GLOBAL arch_outb
 GLOBAL arch_inb
 GLOBAL arch_inw
+GLOBAL arch_outw
 GLOBAL arch_outl
 GLOBAL arch_inl
 GLOBAL arch_disable_interrupts
@@ -45,6 +46,13 @@ arch_halt:
 arch_inl:
     mov dx, di
     in eax, dx
+    ret
+
+; void arch_outw(uint16_t port, uint16_t value)
+arch_outw:
+    mov dx, di
+    mov ax, si
+    out dx, ax
     ret
 
 ; void arch_outl(uint16_t port, uint32_t value)
