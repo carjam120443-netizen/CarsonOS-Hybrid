@@ -298,10 +298,10 @@ static void boot_log(const char *message)
 
     while (*message) {
         char c = *message++;
-        if (c == '\\r') continue;
-        if (c == '\\n') {
+        if (c == '\r') continue;
+        if (c == '\n') {
             if (boot_log_current_len) {
-                boot_log_current[boot_log_current_len] = '\\0';
+                boot_log_current[boot_log_current_len] = '\0';
                 if (boot_log_count < BOOT_LOG_LINES) {
                     for (unsigned i = 0; i < BOOT_LOG_WIDTH; ++i)
                         boot_log_lines[boot_log_count][i] = boot_log_current[i];
@@ -314,12 +314,12 @@ static void boot_log(const char *message)
                         boot_log_lines[BOOT_LOG_LINES - 1][col] = boot_log_current[col];
                 }
                 boot_log_current_len = 0;
-                boot_log_current[0] = '\\0';
+                boot_log_current[0] = '\0';
             }
             boot_screen_draw();
         } else if (boot_log_current_len < BOOT_LOG_WIDTH - 1) {
             boot_log_current[boot_log_current_len++] = c;
-            boot_log_current[boot_log_current_len] = '\\0';
+            boot_log_current[boot_log_current_len] = '\0';
         }
     }
 }
@@ -1226,7 +1226,9 @@ void kernel_main(void)
     serial_init();
     serial_write("\nCarsonOS Hybrid\n");
     serial_write("Boot status: kernel entry reached\n");
-    carson_init_begin(serial_write);
+    framebuffer_init();
+    boot_screen_draw();
+    carson_init_begin(boot_log);
     carson_init_stage("Loading CPU exception manager");
     idt_init();
     serial_write("IDT: 32 exception gates installed\n");
