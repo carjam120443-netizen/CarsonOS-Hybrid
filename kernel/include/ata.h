@@ -1,0 +1,8 @@
+#ifndef CARSONOS_ATA_H
+#define CARSONOS_ATA_H
+#include <stdint.h>
+int ata_init(void);
+int ata_read_sector(uint32_t lba,uint8_t *buffer);
+int ata_is_ready(void);
+uint32_t ata_sector_count(void);
+#endif

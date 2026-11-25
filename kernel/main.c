@@ -3,6 +3,8 @@
 #include "include/memory.h"
 #include "include/pci.h"
 #include "include/net.h"
+#include "include/ata.h"
+#include "include/fat32.h"
 
 struct limine_framebuffer {
     uint64_t address, width, height, pitch;
@@ -252,6 +254,7 @@ static void text(const char *s, uint64_t x, uint64_t y,
 #define KBD_DATA 0x60
 #define KBD_STATUS 0x64
 static char command[64];
+static uint8_t package_catalog[2048];
 static unsigned command_len;
 static unsigned terminal_output_row;
 static uint64_t term_x, term_y, term_w, term_h;
@@ -531,8 +534,10 @@ static void run_command(void)
                      command_is("about") ? 3 :
                      command_is("fetch") ? 4 :
                      command_is("net") ? 3 :
+                     command_is("fs") ? 3 :
                      command_is("carpkg help") ? 5 :
                      command_is("carpkg repo") ? 3 :
+                     command_is("carpkg list") || command_is("carpkg search") ? 5 :
                      command_is("carpkg list") || command_is("carpkg search") ||
                      command_is("carpkg installed") || command_is("carpkg install") ||
                      command_is("carpkg remove") || command_is("carpkg update") ||
@@ -571,6 +576,10 @@ static void run_command(void)
         output_line("E1000 DRIVER:", 0, ACCENT);
         output_line(e1000_is_ready() ? "INITIALIZED" : "NOT READY", 1, TEXT);
         output_line(e1000_link_up() ? "LINK: UP" : "LINK: DOWN", 2, TEXT);
+    } else if (command_is("fs")) {
+        output_line("FILESYSTEM:", 0, ACCENT);
+        output_line(fs_is_mounted() ? "FAT32: MOUNTED READ ONLY" : "FAT32: NOT MOUNTED", 1, TEXT);
+        output_line(fs_status(), 2, MUTED);
     } else if (command_is("carpkg help")) {
         output_line("CARPKG HELP", 0, ACCENT);
         output_line("LIST SEARCH REPO INSTALLED", 1, TEXT);
@@ -582,8 +591,41 @@ static void run_command(void)
         output_line("SOURCE: repos/stable/index.json", 1, TEXT);
         output_line("CATALOG: packages/index.json", 2, TEXT);
     } else if (command_is("carpkg list") || command_is("carpkg search")) {
-        output_line("PACKAGE CATALOG IS EMPTY", 0, MUTED);
-        output_line("NO PACKAGES ARE INDEXED YET", 1, TEXT);
+        uint32_t catalog_size = 0;
+        if (!fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
+                          sizeof(package_catalog)-1, &catalog_size)) {
+            output_line("CANNOT READ PACKAGES/INDEX.JSON", 0, MUTED);
+            output_line("CHECK FAT32 DISK AND FILE PATH", 1, TEXT);
+        } else {
+            package_catalog[catalog_size] = 0;
+            output_line("CATALOG READ FROM FAT32 DISK", 0, ACCENT);
+            unsigned shown = 0;
+            for (uint32_t i=0; i+6<catalog_size && shown<3; ++i) {
+                if (package_catalog[i]!='"' || package_catalog[i+1]!='n' ||
+                    package_catalog[i+2]!='a' || package_catalog[i+3]!='m' ||
+                    package_catalog[i+4]!='e' || package_catalog[i+5]!='"') continue;
+                uint32_t p=i+6;
+                while (p<catalog_size && package_catalog[p]!=':') ++p;
+                if (p==catalog_size) break;
+                ++p;
+                while (p<catalog_size && (package_catalog[p]==' ' ||
+                       package_catalog[p]=='\n' || package_catalog[p]=='\r' ||
+                       package_catalog[p]=='\t')) ++p;
+                if (p>=catalog_size || package_catalog[p]!='"') continue;
+                ++p;
+                char package_name[32];unsigned n=0;
+                while (p<catalog_size && package_catalog[p]!='"' &&
+                       n<sizeof(package_name)-1) {
+                    char ch=(char)package_catalog[p++];
+                    if (ch>='a' && ch<='z') ch=(char)(ch-('a'-'A'));
+                    package_name[n++]=ch;
+                }
+                package_name[n]=0;
+                if (n) output_line(package_name, 1+shown++, TEXT);
+            }
+            if (!shown) output_line("CATALOG HAS ZERO PACKAGES", 1, MUTED);
+            output_line("SHOWING UP TO THREE PACKAGES", 4, MUTED);
+        }
     } else if (command_is("carpkg installed")) {
         output_line("NO PACKAGE DATABASE YET", 0, MUTED);
         output_line("PERSISTENT STORAGE REQUIRED", 1, TEXT);
@@ -931,6 +973,16 @@ void kernel_main(void)
     serial_write("\nHHDM offset=");
     serial_write_hex(memory_hhdm_offset());
     serial_write("\n");
+    if (ata_init()) {
+        serial_write("ATA: primary-master disk detected, sectors=");
+        serial_write_u64(ata_sector_count());
+        serial_write("\n");
+        if (fs_init()) serial_write("Filesystem: FAT32 mounted read-only\n");
+        else { serial_write("Filesystem: "); serial_write(fs_status()); serial_write("\n"); }
+    } else {
+        serial_write("ATA: primary-master disk not detected\n");
+        (void)fs_init();
+    }
     struct pci_device_info netdev;
     if (pci_find_e1000(&netdev)) {
         serial_write("PCI: Intel 82540EM detected at ");
