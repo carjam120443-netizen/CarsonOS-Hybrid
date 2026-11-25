@@ -615,6 +615,7 @@ static int catalog_load(uint32_t *catalog_size)
         return 0;
     for (uint32_t i = 0; i < sizeof(builtin_package_catalog); ++i)
         package_catalog[i] = builtin_package_catalog[i];
+    package_catalog[sizeof(builtin_package_catalog)] = 0;
     *catalog_size = (uint32_t)sizeof(builtin_package_catalog);
     return 1;
 }

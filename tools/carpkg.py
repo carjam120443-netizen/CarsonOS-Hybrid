@@ -88,11 +88,11 @@ def cmd_kernel_header(args):
     output.parent.mkdir(parents=True, exist_ok=True)
     values = ", ".join(f"0x{byte:02x}" for byte in raw)
     output.write_text(
-        "#ifndef CARSONOS_GENERATED_PACKAGE_CATALOG_H\\n"
-        "#define CARSONOS_GENERATED_PACKAGE_CATALOG_H\\n"
-        "#include <stdint.h>\\n"
-        f"static const uint8_t builtin_package_catalog[] = {{{values}}};\\n"
-        "#endif\\n",
+        "#ifndef CARSONOS_GENERATED_PACKAGE_CATALOG_H\n"
+        "#define CARSONOS_GENERATED_PACKAGE_CATALOG_H\n"
+        "#include <stdint.h>\n"
+        f"static const uint8_t builtin_package_catalog[] = {{{values}}};\n"
+        "#endif\n",
         encoding="utf-8",
     )
     print(f"Generated embedded package catalog: {output} ({len(raw)} bytes)")
