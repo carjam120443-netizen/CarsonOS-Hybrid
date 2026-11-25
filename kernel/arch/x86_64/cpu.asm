@@ -4,6 +4,8 @@ DEFAULT REL
 SECTION .text
 GLOBAL arch_outb
 GLOBAL arch_inb
+GLOBAL arch_outl
+GLOBAL arch_inl
 GLOBAL arch_disable_interrupts
 GLOBAL arch_halt
 
@@ -29,4 +31,17 @@ arch_disable_interrupts:
 
 arch_halt:
     hlt
+    ret
+
+; uint32_t arch_inl(uint16_t port)
+arch_inl:
+    mov dx, di
+    in eax, dx
+    ret
+
+; void arch_outl(uint16_t port, uint32_t value)
+arch_outl:
+    mov dx, di
+    mov eax, esi
+    out dx, eax
     ret

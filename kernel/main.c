@@ -1,5 +1,7 @@
 #include <stdint.h>
 #include "include/arch.h"
+#include "include/memory.h"
+#include "include/pci.h"
 
 struct limine_framebuffer {
     uint64_t address, width, height, pitch;
@@ -887,6 +889,28 @@ void kernel_main(void)
     serial_write("Boot status: kernel entry reached\n");
     idt_init();
     serial_write("IDT: 32 exception gates installed\n");
+    memory_init();
+    serial_write("Memory map: usable bytes=");
+    serial_write_u64(memory_usable_bytes());
+    serial_write("\nMemory map: regions=");
+    serial_write_u64(memory_region_count());
+    serial_write("\nHHDM offset=");
+    serial_write_hex(memory_hhdm_offset());
+    serial_write("\n");
+    struct pci_device_info netdev;
+    if (pci_find_e1000(&netdev)) {
+        serial_write("PCI: Intel 82540EM detected at ");
+        serial_write_u64(netdev.bus); serial_write(":");
+        serial_write_u64(netdev.device); serial_write(".");
+        serial_write_u64(netdev.function);
+        serial_write("\nPCI: E1000 BAR0=");
+        serial_write_hex(netdev.bar0);
+        serial_write(" BAR1=");
+        serial_write_hex(netdev.bar1);
+        serial_write("\n");
+    } else {
+        serial_write("PCI: Intel 82540EM not found\n");
+    }
     framebuffer_init();
     if (fb) {
         focused_window = 0;
