@@ -463,7 +463,7 @@ static void draw_switcher(void)
 }
 
 static uint64_t app_menu_x(void) { return 8; }
-static uint64_t app_menu_y(void) { return fb->height - 30 - 126; }
+static uint64_t app_menu_y(void) { return fb->height - 30 - 162; }
 
 static void draw_app_menu(void)
 {
@@ -471,12 +471,13 @@ static void draw_app_menu(void)
     uint64_t x = app_menu_x();
     uint64_t y = app_menu_y();
 
-    rect(x, y, 220, 126, ACCENT);
-    rect(x + 2, y + 2, 216, 122, PANEL);
+    rect(x, y, 220, 162, ACCENT);
+    rect(x + 2, y + 2, 216, 158, PANEL);
     text("BUILT IN APPS", x + 14, y + 12, ACCENT, 1);
     rect(x + 8, y + 34, 204, 1, MUTED);
     text("CARSONSHELL", x + 14, y + 48, TEXT, 1);
     text("SYSTEM INFO", x + 14, y + 84, TEXT, 1);
+    text("FIREFOX (COMING SOON)", x + 14, y + 120, MUTED, 1);
 }
 
 static void draw_terminal_history(void);
@@ -844,12 +845,13 @@ static void run_command(void)
     char *argv[4] = {0};
     unsigned argc = split_arguments(command, argv, 4);
     const char *root = argc ? argv[0] : "";
-    unsigned lines = text_equal(root, "help") ? 7 :
+    unsigned lines = text_equal(root, "help") ? 8 :
                      text_equal(root, "about") ? 3 :
                      text_equal(root, "fetch") ? 4 :
                      text_equal(root, "net") ? 3 :
                      text_equal(root, "fs") ? 3 :
                      text_equal(root, "carpkg") ? 5 :
+                     text_equal(root, "firefox") ? 3 :
                      text_equal(root, "clear") || text_equal(root, "test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
@@ -871,6 +873,7 @@ static void run_command(void)
         output_line("TEST_PANIC - TEST PANIC SCREEN", 4, TEXT);
         output_line("NET - NETWORK STATUS", 5, TEXT);
         output_line("CARPKG - PACKAGE MANAGER", 6, TEXT);
+        output_line("FIREFOX - BROWSER STATUS", 7, TEXT);
     } else if (text_equal(root, "clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
@@ -894,6 +897,10 @@ static void run_command(void)
         output_line(fs_status(), 2, MUTED);
     } else if (text_equal(root, "carpkg")) {
         carpkg_run(argc, argv);
+    } else if (text_equal(root, "firefox")) {
+        output_line("FIREFOX BROWSER", 0, ACCENT);
+        output_line("LAUNCHER ADDED TO CARSONWM.", 1, TEXT);
+        output_line("BROWSER RUNTIME NOT AVAILABLE YET.", 2, MUTED);
     } else if (text_equal(root, "test_panic")) {
         struct exception_frame test = {0};
         test.vector = 3;
@@ -1138,8 +1145,20 @@ static void handle_mouse_click(void)
             app_menu_open = 0;
             return;
         }
+        if (mouse_x >= x && mouse_x < x + 220 &&
+            mouse_y >= y + 108 && mouse_y < y + 144) {
+            focused_window = 0;
+            window_visible[0] = 1;
+            window_minimized[0] = 0;
+            app_menu_open = 0;
+            output_line("FIREFOX LAUNCHER", 0, ACCENT);
+            output_line("REAL FIREFOX CANNOT RUN YET.", 1, TEXT);
+            output_line("NEEDS PROCESSES, NETWORKING, AND BROWSER RUNTIME.", 2, MUTED);
+            terminal_output_row += 3;
+            return;
+        }
         if (mouse_x < x || mouse_x >= x + 220 ||
-            mouse_y < y || mouse_y >= y + 126)
+            mouse_y < y || mouse_y >= y + 162)
             app_menu_open = 0;
     }
 }
