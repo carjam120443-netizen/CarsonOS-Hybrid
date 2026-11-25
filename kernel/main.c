@@ -1295,15 +1295,8 @@ void kernel_main(void)
         serial_write_hex(netdev.bar1);
         serial_write("\n");
         carson_init_report("PCI device discovery", 1);
-        if (e1000_init(&netdev)) {
-            serial_write("E1000: driver initialized; TX/RX rings ready\n");
-            serial_write(e1000_link_up() ? "E1000: physical link is up\n" :
-                                           "E1000: initialized; link is down\n");
-            carson_init_report("E1000 networking", 1);
-        } else {
-            serial_write("E1000: initialization failed safely; networking disabled\n");
-            carson_init_report("E1000 networking", 0);
-        }
+        serial_write("E1000: detected; driver safely deferred pending MMIO/DMA validation\\n");
+        carson_init_report("E1000 networking", 0);
     } else {
         serial_write("PCI: Intel 82540EM not found\n");
         carson_init_report("PCI device discovery", 1);
