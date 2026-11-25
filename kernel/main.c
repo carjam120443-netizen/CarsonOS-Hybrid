@@ -308,11 +308,23 @@ static void output_line(const char *s, unsigned row, uint32_t color)
 
 static void draw_cursor(void)
 {
-    for (int row = 0; row < 14; ++row) {
-        for (int col = 0; col <= row / 2; ++col) {
-            uint64_t x = mouse_x + (uint64_t)col;
-            uint64_t y = mouse_y + (uint64_t)row;
-            pixel(x, y, (col == 0 || col == row / 2) ? 0x07111D : 0xFFFFFF);
+    /* Compact static pointer: dark outline, bright face, teal accent. */
+    static const uint16_t shape[16] = {
+        0x800,0xC00,0xE00,0xF00,0xF80,0xFC0,0xFE0,0xFF0,
+        0xFF8,0xF80,0xDC0,0x8E0,0x06E,0x03C,0x018,0x000
+    };
+    for (unsigned row=0; row<16; ++row) {
+        for (unsigned col=0; col<12; ++col) {
+            if (!(shape[row] & (0x800u >> col))) continue;
+            uint64_t x=mouse_x+col, y=mouse_y+row;
+            for (int oy=-1; oy<=1; ++oy)
+                for (int ox=-1; ox<=1; ++ox) {
+                    if (!ox && !oy) continue;
+                    if ((int64_t)x+ox>=0 && (int64_t)y+oy>=0)
+                        pixel((uint64_t)((int64_t)x+ox),
+                              (uint64_t)((int64_t)y+oy),0x06101C);
+                }
+            pixel(x,y,(row==0 || col==0) ? 0x35D0C5 : 0xFFFFFF);
         }
     }
 }
@@ -539,8 +551,10 @@ static void run_command(void)
     command[command_len] = 0;
     if (!command_len) { draw_input(1); return; }
 
-    unsigned lines = command_is("help") || command_is("about") ? 3 :
-                     command_is("clear") ? 0 : 1;
+    unsigned lines = command_is("help") ? 5 :
+                     command_is("about") ? 3 :
+                     command_is("fetch") ? 4 :
+                     command_is("clear") || command_is("test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
 
@@ -554,6 +568,8 @@ static void run_command(void)
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
+        output_line("FETCH - SHOW SYSTEM INFO", 3, TEXT);
+        output_line("TEST_PANIC - TEST PANIC SCREEN", 4, TEXT);
     } else if (command_is("clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
@@ -561,6 +577,18 @@ static void run_command(void)
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
         output_line("BUILT FROM SCRATCH.", 2, TEXT);
+    } else if (command_is("fetch")) {
+        output_line("CARSONOS HYBRID", 0, ACCENT);
+        output_line("KERNEL: X86_64", 1, TEXT);
+        output_line("BOOT: LIMINE", 2, TEXT);
+        output_line("FRAMEBUFFER: ACTIVE", 3, TEXT);
+    } else if (command_is("test_panic")) {
+        struct exception_frame test = {0};
+        test.vector = 3; /* Synthetic breakpoint exception; no CPU fault is executed. */
+        test.rip = (uint64_t)(uintptr_t)__builtin_return_address(0);
+        test.cs = 0x28;
+        test.rflags = 0x202;
+        carson_exception_handler(&test);
     } else {
         output_line("UNKNOWN COMMAND - TYPE HELP", 0, MUTED);
     }
