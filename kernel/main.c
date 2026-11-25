@@ -253,6 +253,78 @@ static void text(const char *s, uint64_t x, uint64_t y,
     }
 }
 
+#define BOOT_LOG_LINES 12u
+#define BOOT_LOG_WIDTH 96u
+static char boot_log_lines[BOOT_LOG_LINES][BOOT_LOG_WIDTH];
+static unsigned boot_log_count;
+static char boot_log_current[BOOT_LOG_WIDTH];
+static unsigned boot_log_current_len;
+
+static void boot_screen_draw(void)
+{
+    if (!fb) return;
+
+    rect(0, 0, fb->width, fb->height, BG);
+    rect(28, 28, fb->width > 56 ? fb->width - 56 : fb->width, 3, ACCENT);
+    text("CARSONOS HYBRID", 36, 54, TEXT, 3);
+    text("SYSTEM STARTUP", 38, 88, ACCENT, 1);
+    text("INITIALIZING KERNEL COMPONENTS", 38, 122, MUTED, 1);
+
+    uint64_t line_y = 164;
+    uint64_t line_step = 18;
+    unsigned visible = boot_log_count < BOOT_LOG_LINES ? boot_log_count : BOOT_LOG_LINES;
+    for (unsigned i = 0; i < visible; ++i) {
+        text(boot_log_lines[i], 40, line_y + (uint64_t)i * line_step,
+             i + 1 == visible ? ACCENT : TEXT, 1);
+    }
+    if (boot_log_current_len && visible < BOOT_LOG_LINES)
+        text(boot_log_current, 40, line_y + (uint64_t)visible * line_step, ACCENT, 1);
+
+    uint64_t bar_y = fb->height > 42 ? fb->height - 34 : 8;
+    rect(36, bar_y, fb->width > 72 ? fb->width - 72 : fb->width, 2, PANEL);
+    uint64_t bar_width = fb->width > 72 ? fb->width - 72 : fb->width;
+    uint64_t progress = boot_log_count > 10 ? bar_width :
+                       (bar_width * boot_log_count) / 10;
+    if (progress) rect(36, bar_y, progress, 2, ACCENT);
+
+    if (backbuffer_enabled)
+        flush_region(0, 0, fb->width, fb->height);
+}
+
+static void boot_log(const char *message)
+{
+    if (!message) return;
+    serial_write(message);
+
+    while (*message) {
+        char c = *message++;
+        if (c == '\\r') continue;
+        if (c == '\\n') {
+            if (boot_log_current_len) {
+                boot_log_current[boot_log_current_len] = '\\0';
+                if (boot_log_count < BOOT_LOG_LINES) {
+                    for (unsigned i = 0; i < BOOT_LOG_WIDTH; ++i)
+                        boot_log_lines[boot_log_count][i] = boot_log_current[i];
+                    ++boot_log_count;
+                } else {
+                    for (unsigned row = 1; row < BOOT_LOG_LINES; ++row)
+                        for (unsigned col = 0; col < BOOT_LOG_WIDTH; ++col)
+                            boot_log_lines[row - 1][col] = boot_log_lines[row][col];
+                    for (unsigned col = 0; col < BOOT_LOG_WIDTH; ++col)
+                        boot_log_lines[BOOT_LOG_LINES - 1][col] = boot_log_current[col];
+                }
+                boot_log_current_len = 0;
+                boot_log_current[0] = '\\0';
+            }
+            boot_screen_draw();
+        } else if (boot_log_current_len < BOOT_LOG_WIDTH - 1) {
+            boot_log_current[boot_log_current_len++] = c;
+            boot_log_current[boot_log_current_len] = '\\0';
+            boot_screen_draw();
+        }
+    }
+}
+
 #define KBD_DATA 0x60
 #define KBD_STATUS 0x64
 static char command[64];
@@ -1216,7 +1288,6 @@ void kernel_main(void)
         carson_init_report("E1000 networking", 0);
     }
     carson_init_stage("Loading display manager");
-    framebuffer_init();
     carson_init_report("framebuffer display", fb != 0);
     if (fb) {
         focused_window = 0;
