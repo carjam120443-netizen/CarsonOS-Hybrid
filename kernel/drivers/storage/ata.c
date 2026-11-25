@@ -1,6 +1,6 @@
 #include <stdint.h>
-#include "../include/arch.h"
-#include "../include/ata.h"
+#include "../../include/arch.h"
+#include "../../include/ata.h"
 #define DATA 0x1F0
 #define COUNT 0x1F2
 #define LBA0 0x1F3
