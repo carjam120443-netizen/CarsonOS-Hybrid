@@ -250,6 +250,7 @@ static void text(const char *s, uint64_t x, uint64_t y,
 #define KBD_STATUS 0x64
 static char command[64];
 static unsigned command_len;
+static unsigned terminal_output_row;
 static uint64_t term_x, term_y, term_w, term_h;
 static uint64_t info_x, info_w;
 static unsigned focused_window;
@@ -301,7 +302,8 @@ static void draw_input(int present)
 
 static void output_line(const char *s, unsigned row, uint32_t color)
 {
-    text(s, term_x + 20, term_y + 66 + row * 26, color, 2);
+    uint64_t y = term_y + 66 + (terminal_output_row + row) * 26;
+    text(s, term_x + 20, y, color, 2);
 }
 
 static void draw_cursor(void)
@@ -535,14 +537,26 @@ static int command_is(const char *expected)
 static void run_command(void)
 {
     command[command_len] = 0;
-    rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
     if (!command_len) { draw_input(1); return; }
+
+    unsigned lines = command_is("help") || command_is("about") ? 3 :
+                     command_is("clear") ? 0 : 1;
+    unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
+    if (max_rows == 0) max_rows = 1;
+
+    /* Keep previous output; only clear automatically when the output area fills. */
+    if (lines && terminal_output_row + lines > max_rows) {
+        rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
+        terminal_output_row = 0;
+    }
+
     if (command_is("help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
     } else if (command_is("clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
+        terminal_output_row = 0;
     } else if (command_is("about")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
@@ -550,6 +564,7 @@ static void run_command(void)
     } else {
         output_line("UNKNOWN COMMAND - TYPE HELP", 0, MUTED);
     }
+    terminal_output_row += lines;
     command_len = 0;
     command[0] = 0;
     draw_input(0);
@@ -587,14 +602,14 @@ static void keyboard_poll(void)
     if (sc == 0x1c) { run_command(); return; }
     if (sc == 0x0e) {
         if (command_len) command[--command_len] = 0;
-        draw_input(0);
+        draw_input(1);
         return;
     }
     char ch = key_character(sc);
     if (ch && command_len < sizeof(command)-1) {
         command[command_len++] = ch;
         command[command_len] = 0;
-        draw_input(0);
+        draw_input(1);
     }
 }
 
