@@ -2,6 +2,7 @@
 #include "include/arch.h"
 #include "include/memory.h"
 #include "include/pci.h"
+#include "include/net.h"
 
 struct limine_framebuffer {
     uint64_t address, width, height, pitch;
@@ -526,9 +527,16 @@ static void run_command(void)
     command[command_len] = 0;
     if (!command_len) { draw_input(1); return; }
 
-    unsigned lines = command_is("help") ? 5 :
+    unsigned lines = command_is("help") ? 7 :
                      command_is("about") ? 3 :
                      command_is("fetch") ? 4 :
+                     command_is("net") ? 3 :
+                     command_is("carpkg help") ? 5 :
+                     command_is("carpkg repo") ? 3 :
+                     command_is("carpkg list") || command_is("carpkg search") ||
+                     command_is("carpkg installed") || command_is("carpkg install") ||
+                     command_is("carpkg remove") || command_is("carpkg update") ||
+                     command_is("carpkg upgrade") ? 2 :
                      command_is("clear") || command_is("test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
@@ -545,6 +553,8 @@ static void run_command(void)
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
         output_line("FETCH - SHOW SYSTEM INFO", 3, TEXT);
         output_line("TEST_PANIC - TEST PANIC SCREEN", 4, TEXT);
+        output_line("NET - NETWORK STATUS", 5, TEXT);
+        output_line("CARPKG HELP - PACKAGE COMMANDS", 6, TEXT);
     } else if (command_is("clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
@@ -557,6 +567,30 @@ static void run_command(void)
         output_line("KERNEL: X86_64", 1, TEXT);
         output_line("BOOT: LIMINE", 2, TEXT);
         output_line("FRAMEBUFFER: ACTIVE", 3, TEXT);
+    } else if (command_is("net")) {
+        output_line("E1000 DRIVER:", 0, ACCENT);
+        output_line(e1000_is_ready() ? "INITIALIZED" : "NOT READY", 1, TEXT);
+        output_line(e1000_link_up() ? "LINK: UP" : "LINK: DOWN", 2, TEXT);
+    } else if (command_is("carpkg help")) {
+        output_line("CARPKG HELP", 0, ACCENT);
+        output_line("LIST SEARCH REPO INSTALLED", 1, TEXT);
+        output_line("INSTALL/REMOVE NOT READY", 2, TEXT);
+        output_line("UPDATE/UPGRADE NOT READY", 3, TEXT);
+        output_line("CATALOG: repos/stable", 4, TEXT);
+    } else if (command_is("carpkg repo")) {
+        output_line("REPO: CARSONOS-STABLE", 0, ACCENT);
+        output_line("SOURCE: repos/stable/index.json", 1, TEXT);
+        output_line("CATALOG: packages/index.json", 2, TEXT);
+    } else if (command_is("carpkg list") || command_is("carpkg search")) {
+        output_line("PACKAGE CATALOG IS EMPTY", 0, MUTED);
+        output_line("NO PACKAGES ARE INDEXED YET", 1, TEXT);
+    } else if (command_is("carpkg installed")) {
+        output_line("NO PACKAGE DATABASE YET", 0, MUTED);
+        output_line("PERSISTENT STORAGE REQUIRED", 1, TEXT);
+    } else if (command_is("carpkg install") || command_is("carpkg remove") ||
+               command_is("carpkg update") || command_is("carpkg upgrade")) {
+        output_line("PACKAGE OPERATION DISABLED", 0, MUTED);
+        output_line("NETWORK + VERIFIED STORAGE NEEDED", 1, TEXT);
     } else if (command_is("test_panic")) {
         struct exception_frame test = {0};
         test.vector = 3; /* Synthetic breakpoint exception; no CPU fault is executed. */
@@ -908,6 +942,10 @@ void kernel_main(void)
         serial_write(" BAR1=");
         serial_write_hex(netdev.bar1);
         serial_write("\n");
+        if (e1000_init(&netdev))
+            serial_write("E1000: controller initialized; RX polling enabled\n");
+        else
+            serial_write("E1000: initialization failed safely\n");
     } else {
         serial_write("PCI: Intel 82540EM not found\n");
     }
@@ -922,6 +960,7 @@ void kernel_main(void)
         serial_write("CarsonShell: ready\n");
     }
     for (;;) {
+        e1000_poll();
         mouse_poll();
         keyboard_poll();
         __asm__ volatile ("pause");
