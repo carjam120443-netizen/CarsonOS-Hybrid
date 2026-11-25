@@ -214,6 +214,7 @@ static uint64_t mouse_x, mouse_y;
 static uint8_t mouse_packet[3];
 static unsigned mouse_packet_index;
 static int left_button_down;
+static int mouse_ready;
 static int app_menu_open;
 static int window_visible[2] = {1, 1};
 static int window_minimized[2];
@@ -523,6 +524,7 @@ static int mouse_read_ack(void)
 }
 static void mouse_init(void)
 {
+    mouse_ready = 0;
     mouse_x = fb->width / 2;
     mouse_y = fb->height / 2;
     serial_write("PS/2 mouse: init entered\n");
@@ -551,6 +553,7 @@ static void mouse_init(void)
         return;
     }
 
+    mouse_ready = 1;
     serial_write("PS/2 mouse: polling enabled\n");
 }
 static void handle_mouse_click(void)
@@ -614,6 +617,7 @@ static void handle_mouse_click(void)
 
 static void mouse_poll(void)
 {
+    if (!mouse_ready) return;
     uint8_t status = arch_inb(MOUSE_STATUS);
     if (!(status & 1) || !(status & 0x20)) return;
     uint8_t data = arch_inb(MOUSE_DATA);
@@ -640,8 +644,16 @@ static void mouse_poll(void)
     int clicked = left_now && !left_button_down;
     left_button_down = left_now;
 
-    if (clicked) handle_mouse_click();
-    if (moved || clicked) draw_desktop();
+    if (clicked) {
+        serial_write("CarsonWM input: left click detected\n");
+        handle_mouse_click();
+        serial_write("CarsonWM input: click handler returned\n");
+    }
+    if (moved || clicked) {
+        serial_write("CarsonWM input: desktop redraw starting\n");
+        draw_desktop();
+        serial_write("CarsonWM input: desktop redraw returned\n");
+    }
 }
 
 static void framebuffer_init(void)
