@@ -261,6 +261,7 @@ static uint8_t package_catalog[PACKAGE_CATALOG_CAPACITY];
 static char terminal_history[TERMINAL_HISTORY_LINES][96];
 static uint32_t terminal_history_color[TERMINAL_HISTORY_LINES];
 static unsigned terminal_history_count;
+static int catalog_from_disk;
 static unsigned command_len;
 static unsigned terminal_output_row;
 static uint64_t term_x, term_y, term_w, term_h;
@@ -607,8 +608,10 @@ static int catalog_load(uint32_t *catalog_size)
     if (fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
                      sizeof(package_catalog) - 1, catalog_size)) {
         package_catalog[*catalog_size] = 0;
+        catalog_from_disk = 1;
         return 1;
     }
+    catalog_from_disk = 0;
 
     /* Embed the canonical packages/index.json at build time. FAT32 is optional. */
     if (sizeof(builtin_package_catalog) > sizeof(package_catalog))
@@ -670,7 +673,7 @@ static void carpkg_catalog_command(const char *subcommand, const char *query)
     uint32_t size = 0;
     if (!catalog_load(&size)) {
         output_line("PACKAGE CATALOG NOT AVAILABLE", 0, MUTED);
-        output_line("NEED FAT32 PACKAGES/INDEX.JSON", 1, TEXT);
+        output_line("BUILT-IN PACKAGE CATALOG UNAVAILABLE", 1, TEXT);
         return;
     }
 
@@ -688,7 +691,7 @@ static void carpkg_catalog_command(const char *subcommand, const char *query)
     }
     if (!shown)
         output_line(query ? "NO MATCHING PACKAGES" : "CATALOG IS EMPTY", 1, MUTED);
-    output_line("SOURCE: FAT32 PACKAGE CATALOG", 4, MUTED);
+    output_line(catalog_from_disk ? "SOURCE: FAT32 OVERRIDE" : "SOURCE: EMBEDDED KERNEL CATALOG", 4, MUTED);
 }
 
 static void carpkg_run(unsigned argc, char *argv[])
@@ -715,7 +718,10 @@ static void carpkg_run(unsigned argc, char *argv[])
         output_line("BOOTED OS REPO: LOCAL CATALOG ONLY", 4, MUTED);
     } else if (text_equal(sub, "status")) {
         output_line("CARPKG STATUS", 0, ACCENT);
-        output_line(fs_is_mounted() ? "CATALOG DISK: MOUNTED" : "CATALOG DISK: NOT MOUNTED", 1, TEXT);
+        uint32_t catalog_size = 0;
+        int catalog_ready = catalog_load(&catalog_size);
+        output_line(!catalog_ready ? "PACKAGE CATALOG: UNAVAILABLE" :
+                    (catalog_from_disk ? "PACKAGE CATALOG: FAT32 OVERRIDE" : "PACKAGE CATALOG: EMBEDDED"), 1, TEXT);
         output_line(e1000_is_ready() ? "NETWORK DEVICE: READY" : "NETWORK DEVICE: NOT READY", 2, TEXT);
         output_line("ONLINE REPO SYNC: NOT IMPLEMENTED", 3, MUTED);
     } else if (text_equal(sub, "installed")) {
