@@ -509,7 +509,7 @@ static void draw_desktop(void)
         window_x[0]=term_x; window_y[0]=term_y; window_w[0]=term_w; window_h[0]=term_h;
         window_x[1]=info_x; window_y[1]=term_y+36; window_w[1]=info_w; window_h[1]=210;
         geometry_initialized=1;
-        if(diagnose) serial_write("CarsonWM geometry: persistent bounds initialized\\n");
+        if(diagnose) serial_write("CarsonWM geometry: persistent bounds initialized\n");
     }
     /* Redrawing must not reset the positions selected by the user. */
     term_x=window_x[0]; term_y=window_y[0]; term_w=window_w[0]; term_h=window_h[0];
@@ -1047,7 +1047,7 @@ static void keyboard_init(void){
     if(!controller_wait_input())return;
     arch_outb(KBD_STATUS,0xAE);
     keyboard_ready=1;
-    serial_write("PS/2 keyboard: polling controller initialized\\n");
+    serial_write("PS/2 keyboard: polling controller initialized\n");
 }
 static void mouse_init(void)
 {
@@ -1295,7 +1295,7 @@ void kernel_main(void)
         serial_write_hex(netdev.bar1);
         serial_write("\n");
         carson_init_report("PCI device discovery", 1);
-        serial_write("E1000: detected; driver safely deferred pending MMIO/DMA validation\\n");
+        serial_write("E1000: detected; driver safely deferred pending MMIO/DMA validation\n");
         carson_init_report("E1000 networking", 0);
     } else {
         serial_write("PCI: Intel 82540EM not found\n");
