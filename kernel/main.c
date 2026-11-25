@@ -49,6 +49,32 @@ static volatile uint64_t limine_requests_end_marker[2] = {
 
 static struct limine_framebuffer *fb;
 
+struct idt_gate {
+    uint16_t offset_low; uint16_t selector; uint8_t ist; uint8_t type_attr;
+    uint16_t offset_mid; uint32_t offset_high; uint32_t zero;
+} __attribute__((packed));
+struct idtr { uint16_t limit; uint64_t base; } __attribute__((packed));
+struct exception_frame {
+    uint64_t r15,r14,r13,r12,r11,r10,r9,r8;
+    uint64_t rdi,rsi,rbp,rdx,rcx,rbx,rax;
+    uint64_t vector,error,rip,cs,rflags;
+};
+extern void *isr_stub_table[32];
+static struct idt_gate idt[32] __attribute__((aligned(16)));
+static void idt_init(void) {
+    uint16_t cs;
+    __asm__ volatile ("mov %%cs, %0" : "=r"(cs));
+    for (unsigned i=0;i<32;++i) {
+        uint64_t a=(uint64_t)(uintptr_t)isr_stub_table[i];
+        idt[i].offset_low=(uint16_t)a; idt[i].selector=cs;
+        idt[i].ist=0; idt[i].type_attr=0x8E;
+        idt[i].offset_mid=(uint16_t)(a>>16);
+        idt[i].offset_high=(uint32_t)(a>>32); idt[i].zero=0;
+    }
+    struct idtr d={(uint16_t)(sizeof(idt)-1),(uint64_t)(uintptr_t)idt};
+    __asm__ volatile ("lidt %0" : : "m"(d) : "memory");
+}
+
 /* Render complete frames in RAM before presenting them to the framebuffer. */
 #define BACKBUFFER_MAX_WIDTH 1920
 #define BACKBUFFER_MAX_HEIGHT 1080
@@ -173,16 +199,34 @@ static uint8_t glyph(char c, uint8_t row)
     static const uint8_t six[7]={14,16,16,30,17,17,14};
     static const uint8_t eight[7]={14,17,17,14,17,17,14};
     static const uint8_t four[7]={18,18,18,31,2,2,2};
+    static const uint8_t two[7]={14,17,1,2,4,8,31};
+    static const uint8_t three[7]={30,1,1,14,1,1,30};
+    static const uint8_t five[7]={31,16,16,30,1,1,30};
+    static const uint8_t seven[7]={31,1,2,4,8,8,8};
+    static const uint8_t nine[7]={14,17,17,15,1,1,14};
     if (row >= 7) return 0;
     /* Input is stored in lowercase; the bitmap font is uppercase-only. */
     if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
     if (c >= 'A' && c <= 'Z') return alpha[c-'A'][row];
     switch (c) {
         case '0': return zero[row]; case '1': return one[row];
-        case '6': return six[row]; case '8': return eight[row]; case '4': return four[row];
+        case '2': return two[row]; case '3': return three[row];
+        case '4': return four[row]; case '5': return five[row];
+        case '6': return six[row]; case '7': return seven[row];
+        case '8': return eight[row]; case '9': return nine[row];
         case ':': return (row == 2 || row == 5) ? 4 : 0;
         case '-': return row == 3 ? 14 : 0;
         case '_': return row == 6 ? 31 : 0;
+        case '.': return row == 6 ? 4 : 0;
+        case ',': return row == 6 ? 4 : 0;
+        case '|': return 4;
+        case '/': return (uint8_t)(1u << (row < 5 ? 4-row : 0));
+        case '\\': return (uint8_t)(1u << (row < 5 ? row : 4));
+        case '(': return row == 0 || row == 6 ? 2 : 4;
+        case ')': return row == 0 || row == 6 ? 8 : 4;
+        case '+': return row == 3 ? 14 : (row >= 1 && row <= 5 ? 4 : 0);
+        case '\'': return row < 2 ? 4 : 0;
+        case '"': return row < 2 ? 10 : 0;
         default: return 0;
     }
 }
@@ -416,6 +460,70 @@ static void draw_desktop(void)
     flush_framebuffer();
     if (diagnose) serial_write("CarsonWM diagnostic: full framebuffer flush returned\n");
     if (diagnose) serial_write("CarsonWM diagnostic: desktop draw completed\n");
+}
+
+static void serial_write_hex(uint64_t v) {
+    static const char d[]="0123456789ABCDEF";
+    serial_write("0x");
+    for (int sh=60;sh>=0;sh-=4) serial_write_char(d[(v>>sh)&15]);
+}
+static void format_hex(char *o,uint64_t v) {
+    static const char d[]="0123456789ABCDEF";
+    for (unsigned i=0;i<16;++i) o[i]=d[(v>>(60-i*4))&15];
+    o[16]=0;
+}
+static const char *exception_name(uint64_t v) {
+    static const char *const n[32]={
+        "DIVIDE BY ZERO","DEBUG","NON MASKABLE INTERRUPT","BREAKPOINT",
+        "OVERFLOW","BOUND RANGE","INVALID OPCODE","DEVICE NOT AVAILABLE",
+        "DOUBLE FAULT","COPROCESSOR OVERRUN","INVALID TSS","SEGMENT NOT PRESENT",
+        "STACK SEGMENT FAULT","GENERAL PROTECTION","PAGE FAULT","RESERVED",
+        "X87 FLOATING POINT","ALIGNMENT CHECK","MACHINE CHECK","SIMD FLOATING POINT",
+        "VIRTUALIZATION","CONTROL PROTECTION","RESERVED","RESERVED","RESERVED",
+        "RESERVED","RESERVED","RESERVED","HYPERVISOR INJECTION",
+        "VMM COMMUNICATION","SECURITY EXCEPTION","RESERVED"
+    };
+    return v<32?n[v]:"UNKNOWN EXCEPTION";
+}
+__attribute__((noreturn))
+void carson_exception_handler(struct exception_frame *f) {
+    __asm__ volatile ("cli");
+    serial_write("\nCARSONOS KERNEL PANIC\nException: ");
+    serial_write(exception_name(f->vector));
+    serial_write("\nVector: "); serial_write_hex(f->vector);
+    serial_write("\nError: "); serial_write_hex(f->error);
+    serial_write("\nRIP: "); serial_write_hex(f->rip);
+    serial_write("\nCS: "); serial_write_hex(f->cs);
+    serial_write("\nRFLAGS: "); serial_write_hex(f->rflags);
+    serial_write("\n");
+    if (fb) {
+        char v[17]; uint64_t w=fb->width,h=fb->height;
+        rect(0,0,w,h,0x17070B);
+        rect(0,0,w,8,0xE04455);
+        rect(24,24,w>48?w-48:w,h>48?h-48:h,0x21121B);
+        rect(24,24,w>48?w-48:w,3,0xE04455);
+        text("CARSONOS KERNEL PANIC",48,54,0xFF6677,2);
+        text("A CPU EXCEPTION STOPPED THE KERNEL",48,86,TEXT,1);
+        text(exception_name(f->vector),48,124,0xFFFFFF,2);
+        text("VECTOR:",48,180,MUTED,1); format_hex(v,f->vector); text(v,150,180,TEXT,1);
+        text("ERROR:",48,204,MUTED,1); format_hex(v,f->error); text(v,150,204,TEXT,1);
+        text("RIP:",48,228,MUTED,1); format_hex(v,f->rip); text(v,150,228,TEXT,1);
+        text("CS:",48,252,MUTED,1); format_hex(v,f->cs); text(v,150,252,TEXT,1);
+        text("RFLAGS:",48,276,MUTED,1); format_hex(v,f->rflags); text(v,150,276,TEXT,1);
+        text("SYSTEM HALTED - REBOOT REQUIRED",48,h>48?h-48:0,0xFF6677,1);
+        const char *p[]={
+            "   |,.  ,-.  |","   |()L( ()| |","   |.___.',|",
+            "  .j ----   ."," /          \\","/ /         .",
+            "/ /          .","/ /          |",". ,          |",
+            ",.           |","|       .    .","|__      ___ )",
+            "   ----...----"
+        };
+        uint64_t x=w>180?w-174:8;
+        for(unsigned i=0;i<sizeof(p)/sizeof(p[0]);++i)
+            text(p[i],x,112+i*10,0xE8F1FA,1);
+        flush_framebuffer();
+    }
+    for (;;) __asm__ volatile ("cli; hlt");
 }
 
 static int command_is(const char *expected)
@@ -687,6 +795,8 @@ void kernel_main(void)
     serial_init();
     serial_write("\nCarsonOS Hybrid\n");
     serial_write("Boot status: kernel entry reached\n");
+    idt_init();
+    serial_write("IDT: 32 exception gates installed\n");
     framebuffer_init();
     if (fb) {
         focused_window = 0;
