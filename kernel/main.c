@@ -5,6 +5,7 @@
 #include "include/net.h"
 #include "include/ata.h"
 #include "include/fat32.h"
+#include "../build/generated/package_catalog.h"
 
 struct limine_framebuffer {
     uint64_t address, width, height, pitch;
@@ -254,7 +255,12 @@ static void text(const char *s, uint64_t x, uint64_t y,
 #define KBD_DATA 0x60
 #define KBD_STATUS 0x64
 static char command[64];
-static uint8_t package_catalog[2048];
+#define PACKAGE_CATALOG_CAPACITY 8192u
+#define TERMINAL_HISTORY_LINES 64u
+static uint8_t package_catalog[PACKAGE_CATALOG_CAPACITY];
+static char terminal_history[TERMINAL_HISTORY_LINES][96];
+static uint32_t terminal_history_color[TERMINAL_HISTORY_LINES];
+static unsigned terminal_history_count;
 static unsigned command_len;
 static unsigned terminal_output_row;
 static uint64_t term_x, term_y, term_w, term_h;
@@ -310,8 +316,36 @@ static void draw_input(int present)
 
 static void output_line(const char *s, unsigned row, uint32_t color)
 {
-    uint64_t y = term_y + 66 + (terminal_output_row + row) * 26;
-    text(s, term_x + 20, y, color, 2);
+    unsigned index = terminal_output_row + row;
+    unsigned slot = index % TERMINAL_HISTORY_LINES;
+    unsigned n = 0;
+    while (s[n] && n + 1 < sizeof(terminal_history[slot])) {
+        terminal_history[slot][n] = s[n];
+        ++n;
+    }
+    terminal_history[slot][n] = 0;
+    terminal_history_color[slot] = color;
+    if (terminal_history_count < index + 1)
+        terminal_history_count = index + 1;
+    text(terminal_history[slot], term_x + 20,
+         term_y + 66 + row * 26, color, 2);
+}
+
+static void draw_terminal_history(void)
+{
+    unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
+    if (max_rows > TERMINAL_HISTORY_LINES)
+        max_rows = TERMINAL_HISTORY_LINES;
+    unsigned first = terminal_history_count > max_rows
+                   ? terminal_history_count - max_rows : 0;
+    if (terminal_history_count - first > TERMINAL_HISTORY_LINES)
+        first = terminal_history_count - TERMINAL_HISTORY_LINES;
+    for (unsigned index = first; index < terminal_history_count; ++index) {
+        unsigned slot = index % TERMINAL_HISTORY_LINES;
+        unsigned row = index - first;
+        text(terminal_history[slot], term_x + 20,
+             term_y + 66 + row * 26, terminal_history_color[slot], 2);
+    }
 }
 
 static void draw_cursor(void)
@@ -347,8 +381,7 @@ static void draw_switcher(void)
     /* Static overlay: no animation, delay loop, or intermediate flushes. */
     const uint64_t w = 256;
     const uint64_t h = 90;
-    uint64_t x = fb->width > w ? (fb->width - w) / 2 : 0;
-    uint64_t y = fb->height > h ? (fb->height - h) / 2 : 0;
+    uint64_t x = fb->width > w ? (fb->width - w) / 2 : 0;    uint64_t y = fb->height > h ? (fb->height - h) / 2 : 0;
 
     rect(x, y, w, h, ACCENT);
     rect(x + 2, y + 2, w - 4, h - 4, PANEL);
@@ -374,6 +407,8 @@ static void draw_app_menu(void)
     text("CARSONSHELL", x + 14, y + 48, TEXT, 1);
     text("SYSTEM INFO", x + 14, y + 84, TEXT, 1);
 }
+
+static void draw_terminal_history(void);
 
 static void draw_desktop(void)
 {
@@ -414,6 +449,8 @@ static void draw_desktop(void)
     if (window_visible[1] && !window_minimized[1])
         draw_window(window_x[1], window_y[1], window_w[1], window_h[1],
                     "SYSTEM INFO", 1, diagnose);
+    if (window_visible[0] && !window_minimized[0])
+        draw_terminal_history();
     if (diagnose) serial_write("CarsonWM diagnostic: both window draws completed\n");
 
     /* Keep the system information panel free of the duplicate CarsonOS label. */
@@ -567,10 +604,18 @@ static unsigned split_arguments(char *input, char *argv[], unsigned max_args)
 static int catalog_load(uint32_t *catalog_size)
 {
     *catalog_size = 0;
-    if (!fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
-                      sizeof(package_catalog) - 1, catalog_size))
+    if (fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
+                     sizeof(package_catalog) - 1, catalog_size)) {
+        package_catalog[*catalog_size] = 0;
+        return 1;
+    }
+
+    /* Embed the canonical packages/index.json at build time. FAT32 is optional. */
+    if (sizeof(builtin_package_catalog) > sizeof(package_catalog))
         return 0;
-    package_catalog[*catalog_size] = 0;
+    for (uint32_t i = 0; i < sizeof(builtin_package_catalog); ++i)
+        package_catalog[i] = builtin_package_catalog[i];
+    *catalog_size = (uint32_t)sizeof(builtin_package_catalog);
     return 1;
 }
 
@@ -685,8 +730,8 @@ static void carpkg_run(unsigned argc, char *argv[])
         }
     } else if (text_equal(sub, "install") || text_equal(sub, "add")) {
         output_line(arg ? "INSTALL REQUEST RECEIVED" : "USAGE: CARPKG INSTALL NAME", 0, ACCENT);
-        output_line("INSTALLER NOT READY: READ-ONLY FAT32", 1, MUTED);
-        output_line("NEEDS WRITABLE FS, NETWORK + VERIFY", 2, TEXT);
+        output_line("INSTALL NOT AVAILABLE: NO WRITABLE FS", 1, MUTED);
+        output_line("SAFE INSTALLER IS STILL IN DEVELOPMENT", 2, TEXT);
     } else if (text_equal(sub, "remove") || text_equal(sub, "uninstall")) {
         output_line(arg ? "REMOVE REQUEST RECEIVED" : "USAGE: CARPKG REMOVE NAME", 0, ACCENT);
         output_line("REMOVAL NOT READY: NO PACKAGE DATABASE", 1, MUTED);
@@ -697,8 +742,7 @@ static void carpkg_run(unsigned argc, char *argv[])
     } else if (text_equal(sub, "upgrade")) {
         output_line("UPGRADE CHECK NOT AVAILABLE", 0, MUTED);
         output_line("NEEDS INSTALLED DATABASE + REPO SYNC", 1, TEXT);
-    } else if (text_equal(sub, "clean") || text_equal(sub, "autoremove")) {
-        output_line("NO PACKAGE CACHE TO CLEAN", 0, MUTED);
+    } else if (text_equal(sub, "clean") || text_equal(sub, "autoremove")) {        output_line("NO PACKAGE CACHE TO CLEAN", 0, MUTED);
         output_line("PACKAGE INSTALLER IS NOT ENABLED", 1, TEXT);
     } else if (text_equal(sub, "verify")) {
         output_line("CATALOG FILE READ CHECK", 0, ACCENT);
@@ -733,10 +777,7 @@ static void run_command(void)
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
 
-    if (lines && terminal_output_row + lines > max_rows) {
-        rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
-        terminal_output_row = 0;
-    }
+    (void)max_rows; /* terminal history scrolls instead of being erased */
 
     if (text_equal(root, "help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
@@ -749,6 +790,7 @@ static void run_command(void)
     } else if (text_equal(root, "clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
+        terminal_history_count = 0;
     } else if (text_equal(root, "about")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
@@ -996,8 +1038,7 @@ static void handle_mouse_click(void)
         uint64_t x = app_menu_x();
         uint64_t y = app_menu_y();
         if (mouse_x >= x && mouse_x < x + 220 &&
-            mouse_y >= y + 36 && mouse_y < y + 70) {
-            focused_window = 0;
+            mouse_y >= y + 36 && mouse_y < y + 70) {            focused_window = 0;
             window_visible[0] = 1;
             window_minimized[0] = 0;
             app_menu_open = 0;

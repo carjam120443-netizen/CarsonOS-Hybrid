@@ -5,6 +5,7 @@ BUILD := build
 KERNEL := $(BUILD)/kernel.elf
 LIMINE_DIR ?= limine
 ISO := CarsonOS-Hybrid-x86_64.iso
+PACKAGE_HEADER := $(BUILD)/generated/package_catalog.h
 
 C_SOURCES := kernel/main.c kernel/mm/memory.c kernel/drivers/pci/pci.c kernel/drivers/net/e1000.c kernel/drivers/storage/ata.c kernel/fs/fat32.c
 ASM_SOURCES := kernel/arch/x86_64/entry.asm kernel/arch/x86_64/cpu.asm kernel/arch/x86_64/interrupts.asm
@@ -17,6 +18,11 @@ LDFLAGS := -nostdlib -static -no-pie -Wl,-T,kernel/linker.ld -Wl,--build-id=none
 
 .PHONY: all clean iso carpkg-help carpkg-list carpkg-repo carpkg-validate carpkg-update
 all: $(KERNEL)
+
+$(PACKAGE_HEADER): packages/index.json tools/carpkg.py
+	python3 tools/carpkg.py kernel-header --output "$@"
+
+$(BUILD)/kernel/main.o: $(PACKAGE_HEADER)
 
 $(KERNEL): $(OBJECTS) kernel/linker.ld
 	@mkdir -p $(dir $@)

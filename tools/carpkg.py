@@ -78,6 +78,26 @@ def validate_package_tree(package_dir=PACKAGES):
     return entries
 
 
+def cmd_kernel_header(args):
+    """Generate a freestanding C byte array from the canonical package index."""
+    validate_package_tree()
+    raw = INDEX.read_bytes()
+    if len(raw) > 8191:
+        fail("packages/index.json exceeds the kernel catalog limit of 8191 bytes")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    values = ", ".join(f"0x{byte:02x}" for byte in raw)
+    output.write_text(
+        "#ifndef CARSONOS_GENERATED_PACKAGE_CATALOG_H\\n"
+        "#define CARSONOS_GENERATED_PACKAGE_CATALOG_H\\n"
+        "#include <stdint.h>\\n"
+        f"static const uint8_t builtin_package_catalog[] = {{{values}}};\\n"
+        "#endif\\n",
+        encoding="utf-8",
+    )
+    print(f"Generated embedded package catalog: {output} ({len(raw)} bytes)")
+
+
 def cmd_repo(_args):
     cfg = load_config()
     print(f"Repository : {cfg['repository']}")
@@ -211,6 +231,9 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("help", help="show carpkg commands")
     p.set_defaults(func=lambda _args: parser.print_help())
+    p = sub.add_parser("kernel-header", help="generate the kernel embedded package catalog")
+    p.add_argument("--output", default="build/generated/package_catalog.h")
+    p.set_defaults(func=cmd_kernel_header)
     p = sub.add_parser("repo", help="show the configured package repository")
     p.set_defaults(func=cmd_repo)
     p = sub.add_parser("list", help="list packages in the local catalog")
