@@ -313,20 +313,25 @@ static void draw_cursor(void)
         0x800,0xC00,0xE00,0xF00,0xF80,0xFC0,0xFE0,0xFF0,
         0xFF8,0xF80,0xDC0,0x8E0,0x06E,0x03C,0x018,0x000
     };
+    /* Outline pass first, then face pass so later edges cannot overwrite it. */
     for (unsigned row=0; row<16; ++row) {
         for (unsigned col=0; col<12; ++col) {
             if (!(shape[row] & (0x800u >> col))) continue;
-            uint64_t x=mouse_x+col, y=mouse_y+row;
+            int64_t x=(int64_t)mouse_x+col, y=(int64_t)mouse_y+row;
             for (int oy=-1; oy<=1; ++oy)
                 for (int ox=-1; ox<=1; ++ox) {
                     if (!ox && !oy) continue;
-                    if ((int64_t)x+ox>=0 && (int64_t)y+oy>=0)
-                        pixel((uint64_t)((int64_t)x+ox),
-                              (uint64_t)((int64_t)y+oy),0x06101C);
+                    int64_t px=x+ox, py=y+oy;
+                    if (px>=0 && py>=0)
+                        pixel((uint64_t)px,(uint64_t)py,0x06101C);
                 }
-            pixel(x,y,(row==0 || col==0) ? 0x35D0C5 : 0xFFFFFF);
         }
     }
+    for (unsigned row=0; row<16; ++row)
+        for (unsigned col=0; col<12; ++col)
+            if (shape[row] & (0x800u >> col))
+                pixel(mouse_x+col,mouse_y+row,
+                      (row==0 || col==0) ? 0x35D0C5 : 0xFFFFFF);
 }
 
 static void draw_switcher(void)
