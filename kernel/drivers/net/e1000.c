@@ -31,7 +31,8 @@ static struct rx_desc rx_ring[RING_COUNT] __attribute__((aligned(16)));
 static struct tx_desc tx_ring[RING_COUNT] __attribute__((aligned(16)));
 static uint8_t rx_buffers[RING_COUNT][BUFFER_SIZE] __attribute__((aligned(16)));
 static uint8_t tx_buffers[RING_COUNT][BUFFER_SIZE] __attribute__((aligned(16)));
-static unsigned rx_head;\nstatic unsigned tx_head;
+static unsigned rx_head;
+static unsigned tx_head;
 static uint64_t rx_packets;
 static int ready;
 static uint64_t phys(const void *p){uint64_t v=(uint64_t)(uintptr_t)p;if(v<KERNEL_VMA_BASE)return UINT64_MAX;uint64_t a=KERNEL_LMA_BASE+(v-KERNEL_VMA_BASE);return a<0x100000000ull?a:UINT64_MAX;}
@@ -42,7 +43,8 @@ int e1000_init(const struct pci_device_info *d){
  if(!d||d->vendor_id!=0x8086u||d->device_id!=0x100Eu||!memory_hhdm_offset())return 0;
  uint32_t bar=d->bar0;if((bar&1u)||(bar&6u)==4u)return 0;
  uint64_t mmio=(uint64_t)(bar&~0xFu);if(!mmio||UINT64_MAX-memory_hhdm_offset()<mmio)return 0;
- regs=(volatile uint32_t *)memory_map_mmio(mmio, 0x6000u);\n if(!regs)return 0;
+ regs=(volatile uint32_t *)memory_map_mmio(mmio, 0x6000u);
+ if(!regs)return 0;
  uint64_t rp=phys(rx_ring),tp=phys(tx_ring);if(rp==UINT64_MAX||tp==UINT64_MAX||(rp&15u)||(tp&15u))return 0;
  for(unsigned i=0;i<RING_COUNT;++i){uint64_t rb=phys(rx_buffers[i]),tb=phys(tx_buffers[i]);if(rb==UINT64_MAX||tb==UINT64_MAX)return 0;
   rx_ring[i].address=rb;rx_ring[i].length=0;rx_ring[i].checksum=0;rx_ring[i].status=0;rx_ring[i].errors=0;rx_ring[i].special=0;
