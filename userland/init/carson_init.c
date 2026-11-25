@@ -23,7 +23,7 @@ void carson_init_stage(const char *stage)
     if (!initialized || !stage) return;
     log("[BOOT] ");
     log(stage);
-    log("...\\n");
+    log("...\n");
 }
 
 void carson_init_report(const char *component, int started)
