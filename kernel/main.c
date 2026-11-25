@@ -259,7 +259,9 @@ static uint64_t mouse_x, mouse_y;
 static uint8_t mouse_packet[3];
 static unsigned mouse_packet_index;
 static int left_button_down;
-static int mouse_ready;
+static int mouse_ready, keyboard_ready, shift_pressed, geometry_initialized;
+static int drag_window=-1;
+static uint64_t drag_offset_x, drag_offset_y;
 static int app_menu_open;
 static int window_visible[2] = {1, 1};
 static int window_minimized[2];
@@ -382,56 +384,22 @@ static void draw_desktop(void)
         serial_write("CarsonWM geometry: framebuffer width="); serial_write_u64(fb->width);
         serial_write(" height="); serial_write_u64(fb->height); serial_write("\n");
     }
-    term_x = 24;
-    term_y = 42;
-    if (diagnose) serial_write("CarsonWM geometry: base position set\n");
-    term_w = fb->width * 59 / 100;
-    if (diagnose) { serial_write("CarsonWM geometry: initial terminal width="); serial_write_u64(term_w); serial_write("\n"); }
-    if (fb->width > 220 && term_w > fb->width - 220) term_w = fb->width - 220;
-    if (diagnose) { serial_write("CarsonWM geometry: terminal width bounded="); serial_write_u64(term_w); serial_write("\n"); }
-    if (term_w < 360 && fb->width >= 384) term_w = 360;
-    term_h = fb->height > 86 ? fb->height - 86 : fb->height;
-    if (diagnose) { serial_write("CarsonWM geometry: terminal height="); serial_write_u64(term_h); serial_write("\n"); }
-    if (term_h < 230 && fb->height > 50) term_h = fb->height - 50;
-    info_x = term_x + term_w + 14;
-    if (diagnose) { serial_write("CarsonWM geometry: info x="); serial_write_u64(info_x); serial_write("\n"); }
-    info_w = fb->width > info_x + 24 ? fb->width - info_x - 24 : 0;
-    if (diagnose) { serial_write("CarsonWM geometry: info width="); serial_write_u64(info_w); serial_write("\n"); }
-
-    if (diagnose) serial_write("CarsonWM geometry: storing terminal X\\n");
-    window_x[0] = term_x;
-    if (diagnose) serial_write("CarsonWM geometry: storing terminal Y\\n");
-    window_y[0] = term_y;
-    if (diagnose) serial_write("CarsonWM geometry: storing terminal width\\n");
-    window_w[0] = term_w;
-    if (diagnose) serial_write("CarsonWM geometry: storing terminal height\\n");
-    window_h[0] = term_h;
-    if (diagnose) serial_write("CarsonWM geometry: storing info X\\n");
-    window_x[1] = info_x;
-    if (diagnose) serial_write("CarsonWM geometry: storing info Y\\n");
-    window_y[1] = term_y + 36;
-    if (diagnose) serial_write("CarsonWM geometry: storing info width\\n");
-    window_w[1] = info_w;
-    if (diagnose) serial_write("CarsonWM geometry: storing info height\\n");
-    window_h[1] = 210;
-    if (diagnose) serial_write("CarsonWM geometry: default window bounds stored\\n");
-
-    if (window_maximized[0]) {
-        window_x[0] = 8; window_y[0] = 8;
-        window_w[0] = fb->width > 16 ? fb->width - 16 : fb->width;
-        window_h[0] = fb->height > 46 ? fb->height - 46 : fb->height;
+    if (!geometry_initialized) {
+        term_x=24; term_y=42;
+        term_w=fb->width*59/100;
+        if(fb->width>220 && term_w>fb->width-220) term_w=fb->width-220;
+        if(term_w<360 && fb->width>=384) term_w=360;
+        term_h=fb->height>86?fb->height-86:fb->height;
+        if(term_h<230 && fb->height>50) term_h=fb->height-50;
+        info_x=term_x+term_w+14;
+        info_w=fb->width>info_x+24?fb->width-info_x-24:0;
+        window_x[0]=term_x; window_y[0]=term_y; window_w[0]=term_w; window_h[0]=term_h;
+        window_x[1]=info_x; window_y[1]=term_y+36; window_w[1]=info_w; window_h[1]=210;
+        geometry_initialized=1;
+        if(diagnose) serial_write("CarsonWM geometry: persistent bounds initialized\\n");
     }
-    if (diagnose) serial_write("CarsonWM geometry: terminal maximize state applied\n");
-    if (window_maximized[1]) {
-        window_x[1] = 8; window_y[1] = 8;
-        window_w[1] = fb->width > 16 ? fb->width - 16 : fb->width;
-        window_h[1] = fb->height > 46 ? fb->height - 46 : fb->height;
-    }
-    if (diagnose) serial_write("CarsonWM geometry: system maximize state applied\n");
-
-    /* Keep terminal content and input coordinates aligned when maximized. */
-    term_x = window_x[0]; term_y = window_y[0];
-    term_w = window_w[0]; term_h = window_h[0];
+    /* Redrawing must not reset the positions selected by the user. */
+    term_x=window_x[0]; term_y=window_y[0]; term_w=window_w[0]; term_h=window_h[0];
     if (diagnose) serial_write("CarsonWM diagnostic: window geometry calculated\n");
 
     if (window_visible[0] && !window_minimized[0])
@@ -612,17 +580,23 @@ static char key_character(uint8_t sc)
         [34]='g',[35]='h',[36]='j',[37]='k',[38]='l',[44]='z',[45]='x',
         [46]='c',[47]='v',[48]='b',[49]='n',[50]='m',[57]=' '
     };
-    return sc < 58 ? keys[sc] : 0;
+    char ch=sc<58?keys[sc]:0;
+    if(shift_pressed && ch>='a' && ch<='z') ch=(char)(ch-('a'-'A'));
+    return ch;
 }
 static void keyboard_poll(void)
 {
-    uint8_t status = arch_inb(KBD_STATUS);
-    if (!(status & 1) || (status & 0x20)) return;
+    uint8_t status=arch_inb(KBD_STATUS);
+    if(!(status&1))return;
+    if(status&0x20){(void)arch_inb(KBD_DATA);return;}
+    if(!keyboard_ready)return;
     uint8_t sc = arch_inb(KBD_DATA);
 
-    if (sc == 0x38) { alt_pressed = 1; return; }
-    if (sc == 0xB8) { alt_pressed = 0; return; }
-    if (sc & 0x80) return;
+    if(sc==0x38){alt_pressed=1;return;}
+    if(sc==0xB8){alt_pressed=0;draw_desktop();return;}
+    if(sc==0x2A||sc==0x36){shift_pressed=1;return;}
+    if(sc==0xAA||sc==0xB6){shift_pressed=0;return;}
+    if(sc&0x80)return;
 
     if (sc == 0x0f) {
         focused_window ^= 1u;
@@ -678,6 +652,35 @@ static int mouse_read_ack(void)
     if (!ps2_wait_output()) return 0;
     return arch_inb(MOUSE_DATA) == 0xFA;
 }
+static int controller_wait_input(void){
+    for(unsigned i=0;i<100000;++i){if(!(arch_inb(KBD_STATUS)&2))return 1;__asm__ volatile("pause");}
+    return 0;
+}
+static int controller_wait_output(void){
+    for(unsigned i=0;i<100000;++i){if(arch_inb(KBD_STATUS)&1)return 1;__asm__ volatile("pause");}
+    return 0;
+}
+static void keyboard_init(void){
+    keyboard_ready=0;
+    if(!controller_wait_input())return;
+    arch_outb(KBD_STATUS,0xAD);
+    if(!controller_wait_input())return;
+    arch_outb(KBD_STATUS,0xA7);
+    for(unsigned i=0;i<32&&(arch_inb(KBD_STATUS)&1);++i)(void)arch_inb(KBD_DATA);
+    if(!controller_wait_input())return;
+    arch_outb(KBD_STATUS,0x20);
+    if(!controller_wait_output())return;
+    uint8_t cfg=arch_inb(KBD_DATA);
+    cfg=(uint8_t)((cfg&~0x03u)|0x40u);
+    if(!controller_wait_input())return;
+    arch_outb(KBD_STATUS,0x60);
+    if(!controller_wait_input())return;
+    arch_outb(KBD_DATA,cfg);
+    if(!controller_wait_input())return;
+    arch_outb(KBD_STATUS,0xAE);
+    keyboard_ready=1;
+    serial_write("PS/2 keyboard: polling controller initialized\\n");
+}
 static void mouse_init(void)
 {
     mouse_ready = 0;
@@ -725,7 +728,18 @@ static void handle_mouse_click(void)
             if (local_x < 22) {
                 window_minimized[id] = 1;
             } else if (local_x < 44) {
-                window_maximized[id] = !window_maximized[id];
+                if (!window_maximized[id]) {
+                    drag_offset_x=window_x[id]; drag_offset_y=window_y[id];
+                    window_x[id]=8; window_y[id]=8;
+                    window_w[id]=fb->width>16?fb->width-16:fb->width;
+                    window_h[id]=fb->height>46?fb->height-46:fb->height;
+                    window_maximized[id]=1;
+                } else {
+                    window_x[id]=drag_offset_x; window_y[id]=drag_offset_y;
+                    window_w[id]=id==0?(fb->width*59/100):info_w;
+                    window_h[id]=id==0?(fb->height>86?fb->height-86:fb->height):210;
+                    window_maximized[id]=0;
+                }
             } else {
                 window_visible[id] = 0;
                 window_minimized[id] = 0;
@@ -735,7 +749,8 @@ static void handle_mouse_click(void)
         }
         if (mouse_x >= x && mouse_x < x + w &&
             mouse_y >= y && mouse_y < y + 27) {
-            focused_window = id;
+            focused_window=id; drag_window=(int)id;
+            drag_offset_x=mouse_x-x; drag_offset_y=mouse_y-y;
             return;
         }
     }
@@ -773,9 +788,9 @@ static void handle_mouse_click(void)
 
 static void mouse_poll(void)
 {
-    if (!mouse_ready) return;
-    uint8_t status = arch_inb(MOUSE_STATUS);
-    if (!(status & 1) || !(status & 0x20)) return;
+    uint8_t status=arch_inb(MOUSE_STATUS);
+    if (!(status&1) || !(status&0x20)) return;
+    if (!mouse_ready) { (void)arch_inb(MOUSE_DATA); return; }
     uint8_t data = arch_inb(MOUSE_DATA);
     if (mouse_packet_index == 0 && !(data & 0x08)) return;
     mouse_packet[mouse_packet_index++] = data;
@@ -792,13 +807,22 @@ static void mouse_poll(void)
     if (nx >= (int64_t)fb->width) nx = (int64_t)fb->width - 1;
     if (ny >= (int64_t)fb->height) ny = (int64_t)fb->height - 1;
 
-    int moved = (uint64_t)nx != mouse_x || (uint64_t)ny != mouse_y;
-    mouse_x = (uint64_t)nx;
-    mouse_y = (uint64_t)ny;
-
-    int left_now = (mouse_packet[0] & 1) != 0;
-    int clicked = left_now && !left_button_down;
-    left_button_down = left_now;
+    int moved=(uint64_t)nx!=mouse_x || (uint64_t)ny!=mouse_y;
+    mouse_x=(uint64_t)nx; mouse_y=(uint64_t)ny;
+    int left_now=(mouse_packet[0]&1)!=0;
+    int clicked=left_now&&!left_button_down;
+    int released=!left_now&&left_button_down;
+    left_button_down=left_now;
+    if(released) drag_window=-1;
+    if(left_now && drag_window>=0 && moved) {
+        unsigned id=(unsigned)drag_window;
+        int64_t px=(int64_t)mouse_x-(int64_t)drag_offset_x;
+        int64_t py=(int64_t)mouse_y-(int64_t)drag_offset_y;
+        if(px<0)px=0; if(py<0)py=0;
+        if(px+(int64_t)window_w[id]>(int64_t)fb->width) px=(int64_t)fb->width-(int64_t)window_w[id];
+        if(py+27>(int64_t)fb->height-30) py=(int64_t)fb->height-57;
+        window_x[id]=(uint64_t)px; window_y[id]=(uint64_t)py;
+    }
 
     if (clicked) {
         serial_write("CarsonWM input: left click detected\n");
@@ -848,8 +872,9 @@ void kernel_main(void)
     framebuffer_init();
     if (fb) {
         focused_window = 0;
+        keyboard_init();
         mouse_init();
-        serial_write("CarsonWM diagnostic: mouse_init returned\n");
+        serial_write("CarsonWM diagnostic: input initialization returned\n");
         draw_desktop();
         serial_write("CarsonWM: desktop ready\n");
         serial_write("CarsonShell: ready\n");
