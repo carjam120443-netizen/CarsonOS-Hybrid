@@ -519,123 +519,258 @@ void carson_exception_handler(struct exception_frame *f) {
     for (;;) __asm__ volatile ("cli; hlt");
 }
 
-static int command_is(const char *expected)
+static char ascii_lower(char c)
 {
-    unsigned i = 0;
-    while (command[i] && expected[i] && command[i] == expected[i]) ++i;
-    return command[i] == 0 && expected[i] == 0;
+    if (c >= 'A' && c <= 'Z') return (char)(c + ('a' - 'A'));
+    return c;
 }
+
+static int text_equal(const char *a, const char *b)
+{
+    while (*a && *b) {
+        if (ascii_lower(*a) != ascii_lower(*b)) return 0;
+        ++a;
+        ++b;
+    }
+    return *a == 0 && *b == 0;
+}
+
+static int text_contains(const char *haystack, const char *needle)
+{
+    if (!*needle) return 1;
+    for (; *haystack; ++haystack) {
+        const char *a = haystack;
+        const char *b = needle;
+        while (*a && *b && ascii_lower(*a) == ascii_lower(*b)) {
+            ++a;
+            ++b;
+        }
+        if (!*b) return 1;
+    }
+    return 0;
+}
+
+static unsigned split_arguments(char *input, char *argv[], unsigned max_args)
+{
+    unsigned count = 0;
+    char *p = input;
+    while (*p && count < max_args) {
+        while (*p == ' ' || *p == '\t') ++p;
+        if (!*p) break;
+        argv[count++] = p;
+        while (*p && *p != ' ' && *p != '\t') ++p;
+        if (*p) *p++ = 0;
+    }
+    return count;
+}
+
+static int catalog_load(uint32_t *catalog_size)
+{
+    *catalog_size = 0;
+    if (!fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
+                      sizeof(package_catalog) - 1, catalog_size))
+        return 0;
+    package_catalog[*catalog_size] = 0;
+    return 1;
+}
+
+static int catalog_name_at(uint32_t *cursor, char *name, unsigned capacity)
+{
+    uint32_t i = *cursor;
+    while (i + 6 < (uint32_t)sizeof(package_catalog) &&
+           package_catalog[i]) {
+        if (package_catalog[i] == '"' &&
+            package_catalog[i+1] == 'n' &&
+            package_catalog[i+2] == 'a' &&
+            package_catalog[i+3] == 'm' &&
+            package_catalog[i+4] == 'e' &&
+            package_catalog[i+5] == '"') {
+            uint32_t p = i + 6;
+            while (package_catalog[p] && package_catalog[p] != ':') ++p;
+            if (!package_catalog[p]) break;
+            ++p;
+            while (package_catalog[p] == ' ' || package_catalog[p] == '\n' ||
+                   package_catalog[p] == '\r' || package_catalog[p] == '\t') ++p;
+            if (package_catalog[p++] != '"') {
+                i += 6;
+                continue;
+            }
+            unsigned n = 0;
+            while (package_catalog[p] && package_catalog[p] != '"' &&
+                   n + 1 < capacity) {
+                name[n++] = (char)package_catalog[p++];
+            }
+            name[n] = 0;
+            *cursor = p < (uint32_t)sizeof(package_catalog) ? p + 1 : p;
+            return n != 0;
+        }
+        ++i;
+    }
+    *cursor = i;
+    return 0;
+}
+
+static void carpkg_help(void)
+{
+    output_line("CARPKG - PACKAGE MANAGER", 0, ACCENT);
+    output_line("LIST | SEARCH NAME | INFO NAME", 1, TEXT);
+    output_line("REPO | STATUS | INSTALLED", 2, TEXT);
+    output_line("INSTALL | REMOVE | UPDATE | UPGRADE", 3, TEXT);
+    output_line("INSTALL/REMOVE NEED WRITABLE FS + NET", 4, MUTED);
+}
+
+static void carpkg_catalog_command(const char *subcommand, const char *query)
+{
+    uint32_t size = 0;
+    if (!catalog_load(&size)) {
+        output_line("PACKAGE CATALOG NOT AVAILABLE", 0, MUTED);
+        output_line("NEED FAT32 PACKAGES/INDEX.JSON", 1, TEXT);
+        return;
+    }
+
+    output_line(text_equal(subcommand, "search") ?
+                "PACKAGE SEARCH RESULTS" : "AVAILABLE PACKAGES", 0, ACCENT);
+    uint32_t cursor = 0;
+    unsigned shown = 0;
+    char name[64];
+    while (cursor < size && shown < 3 &&
+           catalog_name_at(&cursor, name, sizeof(name))) {
+        if (!query || text_contains(name, query)) {
+            output_line(name, 1 + shown, TEXT);
+            ++shown;
+        }
+    }
+    if (!shown)
+        output_line(query ? "NO MATCHING PACKAGES" : "CATALOG IS EMPTY", 1, MUTED);
+    output_line("SOURCE: FAT32 PACKAGE CATALOG", 4, MUTED);
+}
+
+static void carpkg_run(unsigned argc, char *argv[])
+{
+    const char *sub = argc > 1 ? argv[1] : "help";
+    const char *arg = argc > 2 ? argv[2] : 0;
+
+    if (text_equal(sub, "help") || text_equal(sub, "--help") ||
+        text_equal(sub, "-h")) {
+        carpkg_help();
+    } else if (text_equal(sub, "list") || text_equal(sub, "ls")) {
+        carpkg_catalog_command("list", 0);
+    } else if (text_equal(sub, "search") || text_equal(sub, "find")) {
+        if (!arg) {
+            output_line("USAGE: CARPKG SEARCH NAME", 0, MUTED);
+            output_line("EXAMPLE: CARPKG SEARCH EDITOR", 1, TEXT);
+        } else {
+            carpkg_catalog_command("search", arg);
+        }
+    } else if (text_equal(sub, "repo") || text_equal(sub, "repositories")) {
+        output_line("REPOSITORY: CARSONOS-STABLE", 0, ACCENT);
+        output_line("GIT: CARJAM120443-NETIZEN/CARSONOS-HYBRID", 1, TEXT);
+        output_line("CATALOG: PACKAGES/INDEX.JSON", 2, TEXT);
+        output_line("BOOTED OS REPO: LOCAL CATALOG ONLY", 4, MUTED);
+    } else if (text_equal(sub, "status")) {
+        output_line("CARPKG STATUS", 0, ACCENT);
+        output_line(fs_is_mounted() ? "CATALOG DISK: MOUNTED" : "CATALOG DISK: NOT MOUNTED", 1, TEXT);
+        output_line(e1000_is_ready() ? "NETWORK DEVICE: READY" : "NETWORK DEVICE: NOT READY", 2, TEXT);
+        output_line("ONLINE REPO SYNC: NOT IMPLEMENTED", 3, MUTED);
+    } else if (text_equal(sub, "installed")) {
+        output_line("INSTALLED PACKAGE DATABASE MISSING", 0, MUTED);
+        output_line("INSTALL STATE IS NOT PERSISTED YET", 1, TEXT);
+    } else if (text_equal(sub, "info")) {
+        if (!arg) {
+            output_line("USAGE: CARPKG INFO NAME", 0, MUTED);
+        } else {
+            output_line("PACKAGE DETAILS REQUIRE INDEX METADATA", 0, ACCENT);
+            output_line("USE CARPKG SEARCH TO CHECK THE CATALOG", 1, TEXT);
+            output_line("FULL INFO VIEW NOT IMPLEMENTED", 2, MUTED);
+        }
+    } else if (text_equal(sub, "install") || text_equal(sub, "add")) {
+        output_line(arg ? "INSTALL REQUEST RECEIVED" : "USAGE: CARPKG INSTALL NAME", 0, ACCENT);
+        output_line("INSTALLER NOT READY: READ-ONLY FAT32", 1, MUTED);
+        output_line("NEEDS WRITABLE FS, NETWORK + VERIFY", 2, TEXT);
+    } else if (text_equal(sub, "remove") || text_equal(sub, "uninstall")) {
+        output_line(arg ? "REMOVE REQUEST RECEIVED" : "USAGE: CARPKG REMOVE NAME", 0, ACCENT);
+        output_line("REMOVAL NOT READY: NO PACKAGE DATABASE", 1, MUTED);
+    } else if (text_equal(sub, "update") || text_equal(sub, "refresh")) {
+        output_line("REPOSITORY UPDATE REQUESTED", 0, ACCENT);
+        output_line("ONLINE SYNC NOT IMPLEMENTED IN KERNEL", 1, MUTED);
+        output_line("HOST: PYTHON3 TOOLS/CARPKG.PY UPDATE", 2, TEXT);
+    } else if (text_equal(sub, "upgrade")) {
+        output_line("UPGRADE CHECK NOT AVAILABLE", 0, MUTED);
+        output_line("NEEDS INSTALLED DATABASE + REPO SYNC", 1, TEXT);
+    } else if (text_equal(sub, "clean") || text_equal(sub, "autoremove")) {
+        output_line("NO PACKAGE CACHE TO CLEAN", 0, MUTED);
+        output_line("PACKAGE INSTALLER IS NOT ENABLED", 1, TEXT);
+    } else if (text_equal(sub, "verify")) {
+        output_line("CATALOG FILE READ CHECK", 0, ACCENT);
+        uint32_t size = 0;
+        if (catalog_load(&size)) {
+            output_line("INDEX FILE READABLE", 1, TEXT);
+            output_line("SHA256 PACKAGE VERIFY NOT IMPLEMENTED", 2, MUTED);
+        } else {
+            output_line("INDEX FILE MISSING OR UNREADABLE", 1, MUTED);
+        }
+    } else {
+        output_line("UNKNOWN CARPKG SUBCOMMAND", 0, MUTED);
+        output_line("TYPE CARPKG HELP", 1, TEXT);
+    }
+}
+
 static void run_command(void)
 {
     command[command_len] = 0;
     if (!command_len) { draw_input(1); return; }
 
-    unsigned lines = command_is("help") ? 7 :
-                     command_is("about") ? 3 :
-                     command_is("fetch") ? 4 :
-                     command_is("net") ? 3 :
-                     command_is("fs") ? 3 :
-                     command_is("carpkg help") ? 5 :
-                     command_is("carpkg repo") ? 3 :
-                     command_is("carpkg list") || command_is("carpkg search") ? 5 :
-                     command_is("carpkg list") || command_is("carpkg search") ||
-                     command_is("carpkg installed") || command_is("carpkg install") ||
-                     command_is("carpkg remove") || command_is("carpkg update") ||
-                     command_is("carpkg upgrade") ? 2 :
-                     command_is("clear") || command_is("test_panic") ? 0 : 1;
+    char *argv[4] = {0};
+    unsigned argc = split_arguments(command, argv, 4);
+    const char *root = argc ? argv[0] : "";
+    unsigned lines = text_equal(root, "help") ? 7 :
+                     text_equal(root, "about") ? 3 :
+                     text_equal(root, "fetch") ? 4 :
+                     text_equal(root, "net") ? 3 :
+                     text_equal(root, "fs") ? 3 :
+                     text_equal(root, "carpkg") ? 5 :
+                     text_equal(root, "clear") || text_equal(root, "test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
 
-    /* Keep previous output; only clear automatically when the output area fills. */
     if (lines && terminal_output_row + lines > max_rows) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
     }
 
-    if (command_is("help")) {
+    if (text_equal(root, "help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
         output_line("ABOUT - ABOUT CARSONOS", 2, TEXT);
         output_line("FETCH - SHOW SYSTEM INFO", 3, TEXT);
         output_line("TEST_PANIC - TEST PANIC SCREEN", 4, TEXT);
         output_line("NET - NETWORK STATUS", 5, TEXT);
-        output_line("CARPKG HELP - PACKAGE COMMANDS", 6, TEXT);
-    } else if (command_is("clear")) {
+        output_line("CARPKG - PACKAGE MANAGER", 6, TEXT);
+    } else if (text_equal(root, "clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
-    } else if (command_is("about")) {
+    } else if (text_equal(root, "about")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("A TINY X86_64 KERNEL.", 1, TEXT);
         output_line("BUILT FROM SCRATCH.", 2, TEXT);
-    } else if (command_is("fetch")) {
+    } else if (text_equal(root, "fetch")) {
         output_line("CARSONOS HYBRID", 0, ACCENT);
         output_line("KERNEL: X86_64", 1, TEXT);
         output_line("BOOT: LIMINE", 2, TEXT);
         output_line("FRAMEBUFFER: ACTIVE", 3, TEXT);
-    } else if (command_is("net")) {
+    } else if (text_equal(root, "net")) {
         output_line("E1000 DRIVER:", 0, ACCENT);
         output_line(e1000_is_ready() ? "INITIALIZED" : "NOT READY", 1, TEXT);
         output_line(e1000_link_up() ? "LINK: UP" : "LINK: DOWN", 2, TEXT);
-    } else if (command_is("fs")) {
+    } else if (text_equal(root, "fs")) {
         output_line("FILESYSTEM:", 0, ACCENT);
         output_line(fs_is_mounted() ? "FAT32: MOUNTED READ ONLY" : "FAT32: NOT MOUNTED", 1, TEXT);
         output_line(fs_status(), 2, MUTED);
-    } else if (command_is("carpkg help")) {
-        output_line("CARPKG HELP", 0, ACCENT);
-        output_line("LIST SEARCH REPO INSTALLED", 1, TEXT);
-        output_line("INSTALL/REMOVE NOT READY", 2, TEXT);
-        output_line("UPDATE: USE HOST CARPKG TOOL", 3, TEXT);
-        output_line("CONFIG: PACKAGES/REPOSITORY.JSON", 4, TEXT);
-    } else if (command_is("carpkg repo")) {
-        output_line("REPO: CARSONOS-STABLE", 0, ACCENT);
-        output_line("GIT: CARJAM120443-NETIZEN/CARSONOS-HYBRID", 1, TEXT);
-        output_line("CATALOG: PACKAGES/INDEX.JSON", 2, TEXT);
-    } else if (command_is("carpkg list") || command_is("carpkg search")) {
-        uint32_t catalog_size = 0;
-        if (!fs_read_file("PACKAGES/INDEX.JSON", package_catalog,
-                          sizeof(package_catalog)-1, &catalog_size)) {
-            output_line("CANNOT READ PACKAGES/INDEX.JSON", 0, MUTED);
-            output_line("CHECK FAT32 DISK AND FILE PATH", 1, TEXT);
-        } else {
-            package_catalog[catalog_size] = 0;
-            output_line("CATALOG READ FROM FAT32 DISK", 0, ACCENT);
-            unsigned shown = 0;
-            for (uint32_t i=0; i+6<catalog_size && shown<3; ++i) {
-                if (package_catalog[i]!='"' || package_catalog[i+1]!='n' ||
-                    package_catalog[i+2]!='a' || package_catalog[i+3]!='m' ||
-                    package_catalog[i+4]!='e' || package_catalog[i+5]!='"') continue;
-                uint32_t p=i+6;
-                while (p<catalog_size && package_catalog[p]!=':') ++p;
-                if (p==catalog_size) break;
-                ++p;
-                while (p<catalog_size && (package_catalog[p]==' ' ||
-                       package_catalog[p]=='\n' || package_catalog[p]=='\r' ||
-                       package_catalog[p]=='\t')) ++p;
-                if (p>=catalog_size || package_catalog[p]!='"') continue;
-                ++p;
-                char package_name[32];unsigned n=0;
-                while (p<catalog_size && package_catalog[p]!='"' &&
-                       n<sizeof(package_name)-1) {
-                    char ch=(char)package_catalog[p++];
-                    if (ch>='a' && ch<='z') ch=(char)(ch-('a'-'A'));
-                    package_name[n++]=ch;
-                }
-                package_name[n]=0;
-                if (n) output_line(package_name, 1+shown++, TEXT);
-            }
-            if (!shown) output_line("CATALOG HAS ZERO PACKAGES", 1, MUTED);
-            output_line("SHOWING UP TO THREE PACKAGES", 4, MUTED);
-        }
-    } else if (command_is("carpkg installed")) {
-        output_line("NO PACKAGE DATABASE YET", 0, MUTED);
-        output_line("PERSISTENT STORAGE REQUIRED", 1, TEXT);
-    } else if (command_is("carpkg install") || command_is("carpkg remove") ||
-               command_is("carpkg update") || command_is("carpkg upgrade")) {
-        output_line("PACKAGE OPERATION NOT AVAILABLE", 0, MUTED);
-        output_line("NEEDS TCP/TLS + WRITABLE FS", 1, TEXT);
-    } else if (command_is("test_panic")) {
+    } else if (text_equal(root, "carpkg")) {
+        carpkg_run(argc, argv);
+    } else if (text_equal(root, "test_panic")) {
         struct exception_frame test = {0};
-        test.vector = 3; /* Synthetic breakpoint exception; no CPU fault is executed. */
+        test.vector = 3;
         test.rip = (uint64_t)(uintptr_t)__builtin_return_address(0);
         test.cs = 0x28;
         test.rflags = 0x202;
@@ -643,6 +778,7 @@ static void run_command(void)
     } else {
         output_line("UNKNOWN COMMAND - TYPE HELP", 0, MUTED);
     }
+
     terminal_output_row += lines;
     command_len = 0;
     command[0] = 0;
