@@ -851,7 +851,7 @@ static void run_command(void)
                      text_equal(root, "net") ? 3 :
                      text_equal(root, "fs") ? 3 :
                      text_equal(root, "carpkg") ? 5 :
-                     text_equal(root, "carsonbrowse") ? 3 :
+                     text_equal(root, "carsonbrowse") || text_equal(root, "firefox") ? 4 :
                      text_equal(root, "clear") || text_equal(root, "test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
@@ -897,10 +897,12 @@ static void run_command(void)
         output_line(fs_status(), 2, MUTED);
     } else if (text_equal(root, "carpkg")) {
         carpkg_run(argc, argv);
-    } else if (text_equal(root, "firefox")) {
-        output_line("CARSONBROWSE", 0, ACCENT);
-        output_line("NATIVE BROWSER PROJECT ADDED TO CARSONOS.", 1, TEXT);
-        output_line("BROWSER ENGINE IS A FUTURE MILESTONE.", 2, MUTED);
+    } else if (text_equal(root, "carsonbrowse") || text_equal(root, "firefox")) {
+        output_line("CARSONBROWSE STATUS", 0, ACCENT);
+        output_line(e1000_is_ready() && e1000_link_up() ?
+                    "NETWORK LINK: UP" : "NETWORK DRIVER: NOT READY", 1, TEXT);
+        output_line("HTTP FETCH: WAITING FOR NETWORK STACK", 2, MUTED);
+        output_line("HTTPS/TLS: NOT IMPLEMENTED", 3, MUTED);
     } else if (text_equal(root, "test_panic")) {
         struct exception_frame test = {0};
         test.vector = 3;
