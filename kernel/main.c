@@ -477,7 +477,7 @@ static void draw_app_menu(void)
     rect(x + 8, y + 34, 204, 1, MUTED);
     text("CARSONSHELL", x + 14, y + 48, TEXT, 1);
     text("SYSTEM INFO", x + 14, y + 84, TEXT, 1);
-    text("FIREFOX (COMING SOON)", x + 14, y + 120, MUTED, 1);
+    text("CARSONBROWSE (COMING SOON)", x + 14, y + 120, MUTED, 1);
 }
 
 static void draw_terminal_history(void);
@@ -851,7 +851,7 @@ static void run_command(void)
                      text_equal(root, "net") ? 3 :
                      text_equal(root, "fs") ? 3 :
                      text_equal(root, "carpkg") ? 5 :
-                     text_equal(root, "firefox") ? 3 :
+                     text_equal(root, "carsonbrowse") ? 3 :
                      text_equal(root, "clear") || text_equal(root, "test_panic") ? 0 : 1;
     unsigned max_rows = term_h > 110 ? (unsigned)((term_h - 110) / 26) : 1;
     if (max_rows == 0) max_rows = 1;
@@ -873,7 +873,7 @@ static void run_command(void)
         output_line("TEST_PANIC - TEST PANIC SCREEN", 4, TEXT);
         output_line("NET - NETWORK STATUS", 5, TEXT);
         output_line("CARPKG - PACKAGE MANAGER", 6, TEXT);
-        output_line("FIREFOX - BROWSER STATUS", 7, TEXT);
+        output_line("CARSONBROWSE - BROWSER STATUS", 7, TEXT);
     } else if (text_equal(root, "clear")) {
         rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
         terminal_output_row = 0;
@@ -898,9 +898,9 @@ static void run_command(void)
     } else if (text_equal(root, "carpkg")) {
         carpkg_run(argc, argv);
     } else if (text_equal(root, "firefox")) {
-        output_line("FIREFOX BROWSER", 0, ACCENT);
-        output_line("LAUNCHER ADDED TO CARSONWM.", 1, TEXT);
-        output_line("BROWSER RUNTIME NOT AVAILABLE YET.", 2, MUTED);
+        output_line("CARSONBROWSE", 0, ACCENT);
+        output_line("NATIVE BROWSER PROJECT ADDED TO CARSONOS.", 1, TEXT);
+        output_line("BROWSER ENGINE IS A FUTURE MILESTONE.", 2, MUTED);
     } else if (text_equal(root, "test_panic")) {
         struct exception_frame test = {0};
         test.vector = 3;
@@ -1151,9 +1151,9 @@ static void handle_mouse_click(void)
             window_visible[0] = 1;
             window_minimized[0] = 0;
             app_menu_open = 0;
-            output_line("FIREFOX LAUNCHER", 0, ACCENT);
-            output_line("REAL FIREFOX CANNOT RUN YET.", 1, TEXT);
-            output_line("NEEDS PROCESSES, NETWORKING, AND BROWSER RUNTIME.", 2, MUTED);
+            output_line("CARSONBROWSE LAUNCHER", 0, ACCENT);
+            output_line("NATIVE BROWSER ENGINE NOT BUILT YET.", 1, TEXT);
+            output_line("NEEDS TCP/IP, TLS, HTML, CSS, AND JAVASCRIPT.", 2, MUTED);
             terminal_output_row += 3;
             return;
         }
