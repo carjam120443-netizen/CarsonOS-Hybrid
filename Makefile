@@ -12,11 +12,8 @@ C_OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES))
 ASM_OBJECTS := $(patsubst %.asm,$(BUILD)/%.o,$(ASM_SOURCES))
 OBJECTS := $(C_OBJECTS) $(ASM_OBJECTS)
 
-CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror \\
-          -ffreestanding -fno-stack-protector -fno-pic -fno-pie \\
-          -m64 -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
-LDFLAGS := -nostdlib -static -no-pie -Wl,-T,kernel/linker.ld \\
-           -Wl,--build-id=none -Wl,-z,max-page-size=0x1000
+CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding -fno-stack-protector -fno-pic -fno-pie -m64 -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
+LDFLAGS := -nostdlib -static -no-pie -Wl,-T,kernel/linker.ld -Wl,--build-id=none -Wl,-z,max-page-size=0x1000
 
 .PHONY: all clean iso carpkg-help carpkg-list carpkg-repo carpkg-validate carpkg-update
 all: $(KERNEL)
