@@ -13,7 +13,7 @@ static uint32_t r32(const uint8_t*p){return(uint32_t)p[0]|((uint32_t)p[1]<<8)|((
 static int p2(uint32_t x){return x&&!(x&(x-1));}
 static int readrel(uint32_t n,uint8_t*b){return n<volsz&&vol<=0xFFFFFFFFu-n&&ata_read_sector(vol+n,b);}
 static int bpb(const uint8_t*b){
- if(r16(b+11)!=SS||!p2(b[13])||b[13]>128)return 0;
+ if(b[510]!=0x55||b[511]!=0xAA||r16(b+11)!=SS||!p2(b[13])||b[13]>128||r16(b+17)!=0||r16(b+22)!=0)return 0;
  uint32_t res=r16(b+14),nf=b[16],fs=r32(b+36),total=r32(b+32);if(!total)total=r16(b+19);
  if(!res||!nf||nf>2||!fs||!total||r16(b+42))return 0;
  uint32_t rt=r32(b+44);uint64_t first=(uint64_t)res+(uint64_t)nf*fs;
@@ -36,20 +36,26 @@ static uint32_t clsec(uint32_t c){if(c<2||c>=clusters+2u)return 0xFFFFFFFFu;uint
 static int shortname(const char*s,uint8_t out[11]){
  for(unsigned i=0;i<11;++i)out[i]=' ';
  unsigned base=0,ext=0;int dot=0,any=0;
- while(*s&&*s!='/'){char c=*s++;if(c=='.'){if(dot)return 0;dot=1;continue;}if(c>='a'&&c<='z')c=(char)(c-32);if(c<'!'||c>'~'||c=='"'||c=='*'||c=='+'||c==','||c==':'||c==';'||c=='<'||c=='='||c=='>'||c=='?'||c=='['||c=='\\'||c==']'||c=='|')return 0;if(!dot){if(base>=8)return 0;out[base++]=(uint8_t)c;}else{if(ext>=3)return 0;out[8+ext++]=(uint8_t)c;}any=1;}
+ while(*s){char c=*s++;if(c=='.'){if(dot)return 0;dot=1;continue;}if(c>='a'&&c<='z')c=(char)(c-32);if(c<'!'||c>'~'||c=='"'||c=='*'||c=='+'||c==','||c==':'||c==';'||c=='<'||c=='='||c=='>'||c=='?'||c=='['||c=='\\'||c==']'||c=='|')return 0;if(!dot){if(base>=8)return 0;out[base++]=(uint8_t)c;}else{if(ext>=3)return 0;out[8+ext++]=(uint8_t)c;}any=1;}
  return any&&base;
 }
+static uint8_t lfn_sum(const uint8_t*n){uint8_t s=0;for(unsigned i=0;i<11;++i)s=(uint8_t)(((s&1u)?0x80u:0u)+(s>>1)+n[i]);return s;}
+static int eqname(const char*a,const char*b){while(*a&&*b){char x=*a++,y=*b++;if(x>='a'&&x<='z')x=(char)(x-32);if(y>='a'&&y<='z')y=(char)(y-32);if(x!=y)return 0;}return *a==0&&*b==0;}
 struct ent{uint32_t cluster,size;uint8_t attr;};
-static int lookup(uint32_t dir,const uint8_t name[11],struct ent*out){
- uint32_t c=dir;for(uint32_t chain=0;chain<clusters;++chain){uint32_t first=clsec(c);if(first==0xFFFFFFFFu)return 0;
-  for(uint32_t s=0;s<spc;++s){if(!readrel(first+s,sec))return 0;for(unsigned o=0;o<SS;o+=32){const uint8_t*e=sec+o;if(!e[0])return 0;if(e[0]==0xE5||e[11]==0x0F||(e[11]&8))continue;unsigned k=0;while(k<11&&e[k]==name[k])++k;if(k==11){out->cluster=((uint32_t)r16(e+20)<<16)|r16(e+26);out->size=r32(e+28);out->attr=e[11];return 1;}}}
+static int lookup(uint32_t dir,const char*wanted,struct ent*out){
+ uint8_t sn[11];int has_short=shortname(wanted,sn);uint32_t c=dir;
+ for(uint32_t chain=0;chain<clusters;++chain){uint32_t first=clsec(c);if(first==0xFFFFFFFFu)return 0;char lfn[256]={0};uint8_t sum=0;int active=0;
+  for(uint32_t s=0;s<spc;++s){if(!readrel(first+s,sec))return 0;for(unsigned o=0;o<SS;o+=32){const uint8_t*e=sec+o;if(!e[0])return 0;if(e[0]==0xE5){active=0;continue;}
+    if(e[11]==0x0F){unsigned seq=e[0]&0x1Fu;if(!seq||seq>20){active=0;continue;}if(e[0]&0x40u){for(unsigned z=0;z<sizeof(lfn);++z)lfn[z]=0;sum=e[13];active=1;}if(!active||e[13]!=sum)continue;static const uint8_t pos[13]={1,3,5,7,9,14,16,18,20,22,24,28,30};for(unsigned k=0;k<13;++k){uint16_t ch=r16(e+pos[k]);unsigned at=(seq-1u)*13u+k;if(at<255){if(ch==0||ch==0xFFFF)lfn[at]=0;else lfn[at]=(char)(ch<128?ch:'?');}}continue;}
+    int match=0;if(has_short){unsigned k=0;while(k<11&&e[k]==sn[k])++k;if(k==11)match=1;}if(active&&sum==lfn_sum(e)&&eqname(wanted,lfn))match=1;active=0;
+    if(match){out->cluster=((uint32_t)r16(e+20)<<16)|r16(e+26);out->size=r32(e+28);out->attr=e[11];return 1;}
+   }}
   uint32_t n=nextc(c);if(n>=EOC||n==BAD||n<2)return 0;c=n;
  }return 0;
 }
 int fs_read_file(const char*path,uint8_t*out,uint32_t cap,uint32_t*size_out){
- if(size_out)*size_out=0;if(!mounted||!path||!out||!cap)return 0;while(*path=='/')++path;
- uint32_t dir=root;struct ent e={0,0,0};
- while(*path){uint8_t name[11];if(!shortname(path,name))return 0;while(*path&&*path!='/')++path;int more=0;while(*path=='/'){++path;more=1;}if(!lookup(dir,name,&e))return 0;
+ if(size_out)*size_out=0;if(!mounted||!path||!out||!cap)return 0;while(*path=='/')++path;uint32_t dir=root;struct ent e={0,0,0};
+ while(*path){char component[256];unsigned len=0;while(path[len]&&path[len]!='/'){if(len>=255)return 0;component[len]=path[len];++len;}component[len]=0;path+=len;int more=0;while(*path=='/'){++path;more=1;}if(!lookup(dir,component,&e))return 0;
   if(more){if(!(e.attr&0x10)||e.cluster<2)return 0;dir=e.cluster;}
   else{if((e.attr&0x10)||e.size>cap||(e.size&&e.cluster<2))return 0;uint32_t left=e.size,pos=0,c=e.cluster;
    for(uint32_t chain=0;left&&chain<clusters;++chain){uint32_t first=clsec(c);if(first==0xFFFFFFFFu)return 0;for(uint32_t s=0;s<spc&&left;++s){if(!readrel(first+s,sec))return 0;uint32_t n=left<SS?left:SS;for(uint32_t i=0;i<n;++i)out[pos+i]=sec[i];pos+=n;left-=n;}if(left){uint32_t n=nextc(c);if(n>=EOC||n==BAD||n<2)return 0;c=n;}}
