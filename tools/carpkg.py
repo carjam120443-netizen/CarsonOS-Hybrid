@@ -209,6 +209,8 @@ def cmd_build_iso(args):
 def main():
     parser = argparse.ArgumentParser(prog="carpkg", description="CarsonOS package repository tools")
     sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("help", help="show carpkg commands")
+    p.set_defaults(func=lambda _args: parser.print_help())
     p = sub.add_parser("repo", help="show the configured package repository")
     p.set_defaults(func=cmd_repo)
     p = sub.add_parser("list", help="list packages in the local catalog")
