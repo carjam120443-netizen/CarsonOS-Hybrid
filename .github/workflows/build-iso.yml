@@ -34,9 +34,7 @@ jobs:
         run: |
           set -eux
           mkdir -p limine
-          curl -fL \\
-            https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.gz \\
-            -o /tmp/limine-binary.tar.gz
+          curl -fL "https://github.com/Limine-Bootloader/Limine/releases/download/v12.11.1/limine-binary.tar.gz" -o /tmp/limine-binary.tar.gz
           tar -xzf /tmp/limine-binary.tar.gz -C limine
 
           LIMINE_SYS="$(find limine -type f -name limine-bios.sys -print -quit)"
@@ -48,10 +46,7 @@ jobs:
       - name: Assemble bootable ISO with package repository
         run: |
           set -eux
-          python3 tools/carpkg.py build-iso \\
-            --kernel build/kernel.elf \\
-            --limine-dir "$LIMINE_DIR" \\
-            --output CarsonOS-Hybrid-x86_64.iso
+          python3 tools/carpkg.py build-iso --kernel build/kernel.elf --limine-dir "$LIMINE_DIR" --output CarsonOS-Hybrid-x86_64.iso
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
