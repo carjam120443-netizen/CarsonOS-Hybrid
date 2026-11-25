@@ -328,8 +328,6 @@ static void output_line(const char *s, unsigned row, uint32_t color)
     terminal_history_color[slot] = color;
     if (terminal_history_count < index + 1)
         terminal_history_count = index + 1;
-    text(terminal_history[slot], term_x + 20,
-         term_y + 66 + row * 26, color, 2);
 }
 
 static void draw_terminal_history(void)
@@ -786,6 +784,13 @@ static void run_command(void)
 
     (void)max_rows; /* terminal history scrolls instead of being erased */
 
+    /* Reserve clean history slots for this command so unused rows stay blank. */
+    for (unsigned i = 0; i < lines && i < TERMINAL_HISTORY_LINES; ++i) {
+        unsigned slot = (terminal_output_row + i) % TERMINAL_HISTORY_LINES;
+        terminal_history[slot][0] = 0;
+        terminal_history_color[slot] = MUTED;
+    }
+
     if (text_equal(root, "help")) {
         output_line("HELP - SHOW COMMANDS", 0, TEXT);
         output_line("CLEAR - CLEAR SCREEN", 1, TEXT);
@@ -831,6 +836,8 @@ static void run_command(void)
     terminal_output_row += lines;
     command_len = 0;
     command[0] = 0;
+    rect(term_x + 12, term_y + 54, term_w - 24, term_h - 110, PANEL);
+    draw_terminal_history();
     draw_input(0);
     flush_region(term_x + 12, term_y + 54, term_w - 24, term_h - 110);
     flush_region(term_x + 12, term_y + term_h - 43, term_w - 24, 30);
