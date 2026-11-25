@@ -112,7 +112,7 @@ def cmd_update(_args):
         checkout.mkdir()
         subprocess.run(["git", "init", str(checkout)], check=True, stdout=subprocess.DEVNULL)
         subprocess.run(["git", "-C", str(checkout), "remote", "add", "origin", cfg["git_url"]], check=True)
-        subprocess.run(["git", "-C", str(checkout), "fetch", "--depth=1", "origin", cfg["branch"], check=True)
+        subprocess.run(["git", "-C", str(checkout), "fetch", "--depth=1", "origin", cfg["branch"]], check=True)
         subprocess.run(["git", "-C", str(checkout), "archive", "--format=tar", "-o", str(archive), "FETCH_HEAD", "packages"], check=True)
         extracted = temp / "extracted"
         extracted.mkdir()
