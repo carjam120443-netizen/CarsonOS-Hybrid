@@ -1,7 +1,7 @@
 # Filesystem subsystem
 
-This milestone adds primary-master ATA PIO IDENTIFY and bounded LBA28 sector
-reads, FAT32 volume discovery from an MBR partition (types 0x0B/0x0C) or a
+This milestone adds primary-master ATA PIO IDENTIFY, bounded LBA28 sector
+reads and single-sector writes with cache flush, FAT32 volume discovery from an MBR partition (types 0x0B/0x0C) or a
 superfloppy boot sector, and read-only file lookup using FAT32 8.3 short names.
 
 The first test target is a new, blank, disposable VDI attached as the primary
