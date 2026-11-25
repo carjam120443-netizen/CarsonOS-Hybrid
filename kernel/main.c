@@ -818,7 +818,8 @@ static void mouse_poll(void)
         unsigned id=(unsigned)drag_window;
         int64_t px=(int64_t)mouse_x-(int64_t)drag_offset_x;
         int64_t py=(int64_t)mouse_y-(int64_t)drag_offset_y;
-        if(px<0)px=0; if(py<0)py=0;
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
         if(px+(int64_t)window_w[id]>(int64_t)fb->width) px=(int64_t)fb->width-(int64_t)window_w[id];
         if(py+27>(int64_t)fb->height-30) py=(int64_t)fb->height-57;
         window_x[id]=(uint64_t)px; window_y[id]=(uint64_t)py;
