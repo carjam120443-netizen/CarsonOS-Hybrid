@@ -1,6 +1,6 @@
 #include <stdint.h>
-#include "../include/arch.h"
-#include "../include/pci.h"
+#include "../../include/arch.h"
+#include "../../include/pci.h"
 
 #define PCI_CONFIG_ADDRESS 0xCF8
 #define PCI_CONFIG_DATA    0xCFC
