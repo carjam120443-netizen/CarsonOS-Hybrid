@@ -112,7 +112,7 @@ def cmd_update(_args):
         checkout.mkdir()
         subprocess.run(["git", "init", str(checkout)], check=True, stdout=subprocess.DEVNULL)
         subprocess.run(["git", "-C", str(checkout), "remote", "add", "origin", cfg["git_url"]], check=True)
-        subprocess.run(["git", "-C", str(checkout), "fetch", "--depth=1", "origin", cfg["branch}"], check=True)
+        subprocess.run(["git", "-C", str(checkout), "fetch", "--depth=1", "origin", cfg["branch"], check=True)
         subprocess.run(["git", "-C", str(checkout), "archive", "--format=tar", "-o", str(archive), "FETCH_HEAD", "packages"], check=True)
         extracted = temp / "extracted"
         extracted.mkdir()
@@ -126,6 +126,9 @@ def cmd_update(_args):
         if not (downloaded / "repository.json").is_file():
             fail("remote repository archive did not contain packages/repository.json")
         validate_package_tree(downloaded)
+        # Keep the locally selected remote/branch; the fetched catalog must not
+        # silently replace the user's repository configuration.
+        shutil.copy2(CONFIG, downloaded / "repository.json")
         backup = temp / "old-packages"
         os.replace(PACKAGES, backup)
         try:
@@ -177,7 +180,11 @@ def cmd_build_iso(args):
         shutil.copy2(limine_dir / "limine-bios-cd.bin", iso_root / "boot" / "limine")
         shutil.copy2(limine_dir / "limine-uefi-cd.bin", iso_root / "boot" / "limine")
         shutil.copy2(limine_dir / "BOOTX64.EFI", iso_root / "EFI" / "BOOT")
-        shutil.copytree(PACKAGES, iso_root / "PACKAGES")
+        iso_destination = Path(load_config()["iso_path"])
+        if iso_destination.is_absolute() or ".." in iso_destination.parts:
+            fail("iso_path must stay inside the ISO root")
+        shutil.copytree(PACKAGES, iso_root / iso_destination)
+        output.unlink(missing_ok=True)
         command = [
             "xorriso", "-as", "mkisofs", "-R", "-r", "-J",
             "-b", "boot/limine/limine-bios-cd.bin",
