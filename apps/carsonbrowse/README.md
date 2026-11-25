@@ -1,31 +1,36 @@
 # CarsonBrowse
 
-CarsonBrowse is the planned native web browser for CarsonOS. It is our own project and is not Firefox or a Firefox rebrand.
+CarsonBrowse is CarsonOS's native browser project, not Firefox or a Firefox rebrand.
 
-## Current status
+## Implemented foundation
 
-The current kernel integration is a desktop-menu entry and a `carsonbrowse` shell status command. **There is no working browser engine yet.** This scaffold does not fetch or render websites.
+- Bounded HTTP URL parser (HTTP only; explicit ports and query paths).
+- HTTP/1.x response-header parser.
+- Basic HTML-to-text extraction, title capture, common named entities, and script/style suppression.
+- Back/forward history with 16 entries.
+- A transport callback API so a future CarsonNet socket layer can fetch pages without mixing I/O into parsers.
+- Host regression tests: run make carsonbrowse-check.
 
-## Planned implementation
+The existing desktop menu entry and carsonbrowse shell command remain the OS-facing launcher/status hook.
 
-Build this in small native components instead of trying to port a desktop browser immediately:
+## Current limitations
 
-1. CarsonNet: Ethernet driver, packet buffers, ARP, IPv4, ICMP, UDP, TCP, DNS, and sockets.
-2. CarsonTLS: certificate validation and HTTPS support.
-3. CarsonHTML: a safe HTML tokenizer and basic document tree.
-4. CarsonCSS: a deliberately small layout/style subset.
-5. CarsonRender: text, links, images, scrolling, and framebuffer drawing.
-6. CarsonBrowse UI: address bar, back/forward, reload, tabs later, and page view.
-7. JavaScript support only after the core browser is stable; use a well-isolated engine rather than improvising an unsafe partial implementation.
+This is browser-engine groundwork, not a live browser yet. CarsonOS does not currently provide a working TCP/IP socket API, DNS resolver, HTTPS/TLS, user-mode process isolation, or a browser window/address bar. No live site can be fetched from the ISO until a real transport is connected to cb_fetch_fn.
 
-## Initial scope
+## Next implementation stages
 
-The first usable milestone should be a text-focused HTTP browser for simple pages. HTTPS, CSS layout, images, and JavaScript can follow in separate milestones.
+1. Finish the E1000 driver and safely map its MMIO BAR.
+2. Add packet buffers, ARP, IPv4, ICMP, UDP, TCP, DNS, and a bounded socket API in CarsonNet.
+3. Connect plain HTTP transport to cb_fetch_fn; add timeouts and redirect limits.
+4. Add CarsonTLS with certificate-chain and hostname validation. Never silently downgrade HTTPS to HTTP.
+5. Add a framebuffer window with address bar, page text, links, scrolling, back, forward, and reload.
+6. Expand HTML parsing and add a small CSS layout engine.
+7. Add image decoding; consider JavaScript only later through an isolated maintained engine.
 
-## Safety and engineering notes
+## Security boundaries
 
-- Treat all downloaded page content as untrusted input.
-- Bound every network buffer and parser allocation.
-- Validate TLS certificates before showing a connection as secure.
-- Do not execute page scripts in kernel mode.
-- Keep the browser engine out of the kernel; it needs user-mode process isolation first.
+- Treat all downloaded content as untrusted.
+- Keep parser buffers bounded.
+- Never execute downloaded scripts in kernel mode.
+- Do not label a connection secure without successful TLS certificate validation.
+- Move browser parsing into isolated userland once CarsonOS has process isolation. The callback API is groundwork, not permission to parse hostile content in ring 0.

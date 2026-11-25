@@ -1,59 +1,49 @@
 CROSS ?= x86_64-linux-gnu-
 CC := $(CROSS)gcc
+HOST_CC ?= cc
 NASM ?= nasm
 BUILD := build
 KERNEL := $(BUILD)/kernel.elf
 LIMINE_DIR ?= limine
 ISO := CarsonOS-Hybrid-x86_64.iso
 PACKAGE_HEADER := $(BUILD)/generated/package_catalog.h
-
 C_SOURCES := kernel/main.c kernel/mm/memory.c kernel/drivers/pci/pci.c kernel/drivers/net/e1000.c kernel/drivers/storage/ata.c kernel/fs/fat32.c userland/init/carson_init.c
 ASM_SOURCES := kernel/arch/x86_64/entry.asm kernel/arch/x86_64/cpu.asm kernel/arch/x86_64/interrupts.asm
 C_OBJECTS := $(patsubst %.c,$(BUILD)/%.o,$(C_SOURCES))
 ASM_OBJECTS := $(patsubst %.asm,$(BUILD)/%.o,$(ASM_SOURCES))
 OBJECTS := $(C_OBJECTS) $(ASM_OBJECTS)
-
 CFLAGS := -std=gnu11 -O2 -Wall -Wextra -Werror -ffreestanding -fno-stack-protector -fno-pic -fno-pie -m64 -mno-red-zone -mgeneral-regs-only -mcmodel=kernel
 LDFLAGS := -nostdlib -static -no-pie -Wl,-T,kernel/linker.ld -Wl,--build-id=none -Wl,-z,max-page-size=0x1000
-
-.PHONY: all clean iso carpkg-help carpkg-list carpkg-repo carpkg-validate carpkg-update
+.PHONY: all clean iso carpkg-help carpkg-list carpkg-repo carpkg-validate carpkg-update carsonbrowse-check
 all: $(KERNEL)
-
 $(PACKAGE_HEADER): packages/index.json tools/carpkg.py
 	python3 tools/carpkg.py kernel-header --output "$@"
-
 $(BUILD)/kernel/main.o: $(PACKAGE_HEADER)
-
 $(KERNEL): $(OBJECTS) kernel/linker.ld
 	@mkdir -p $(dir $@)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS)
 	@echo "Built $@"
-
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
 $(BUILD)/%.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf64 $< -o $@
-
 iso: $(KERNEL)
 	python3 tools/carpkg.py build-iso --kernel "$(KERNEL)" --limine-dir "$(LIMINE_DIR)" --output "$(ISO)"
-
+carsonbrowse-check:
+	@mkdir -p $(BUILD)/carsonbrowse
+	$(HOST_CC) -std=c11 -O2 -Wall -Wextra -Werror -Iapps/carsonbrowse/include apps/carsonbrowse/src/core.c apps/carsonbrowse/tests/test_core.c -o $(BUILD)/carsonbrowse/test_core
+	$(BUILD)/carsonbrowse/test_core
 carpkg-help:
 	python3 tools/carpkg.py --help
-
 carpkg-list:
 	python3 tools/carpkg.py list
-
 carpkg-repo:
 	python3 tools/carpkg.py repo
-
 carpkg-validate:
 	python3 tools/carpkg.py validate
-
 carpkg-update:
 	python3 tools/carpkg.py update
-
 clean:
 	rm -rf $(BUILD)
