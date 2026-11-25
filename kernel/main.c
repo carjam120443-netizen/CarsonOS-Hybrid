@@ -817,7 +817,7 @@ static void mouse_poll(void)
     int dx = (int)(int8_t)mouse_packet[1];
     int dy = (int)(int8_t)mouse_packet[2];
     int64_t nx = (int64_t)mouse_x - dx;
-    int64_t ny = (int64_t)mouse_y + dy;
+    int64_t ny = (int64_t)mouse_y - dy;
     if (nx < 0) nx = 0;
     if (ny < 0) ny = 0;
     if (nx >= (int64_t)fb->width) nx = (int64_t)fb->width - 1;
