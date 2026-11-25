@@ -1130,10 +1130,14 @@ void kernel_main(void)
         serial_write(" BAR1=");
         serial_write_hex(netdev.bar1);
         serial_write("\n");
-        if (e1000_init(&netdev))
-            serial_write("E1000: controller initialized; RX polling enabled\n");
-        else
-            serial_write("E1000: initialization failed safely\n");
+        /*
+         * PCI discovery is safe, but this kernel does not yet install page
+         * table entries for PCI MMIO regions. Calling e1000_init() here
+         * dereferences HHDM + BAR0 (0xF0000000) and can page-fault before the
+         * framebuffer is initialized. Keep boot reliable until the MMIO
+         * mapper is implemented.
+         */
+        serial_write("E1000: detected; MMIO mapping unavailable, driver deferred\n");
     } else {
         serial_write("PCI: Intel 82540EM not found\n");
     }
