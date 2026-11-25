@@ -320,7 +320,6 @@ static void boot_log(const char *message)
         } else if (boot_log_current_len < BOOT_LOG_WIDTH - 1) {
             boot_log_current[boot_log_current_len++] = c;
             boot_log_current[boot_log_current_len] = '\\0';
-            boot_screen_draw();
         }
     }
 }
