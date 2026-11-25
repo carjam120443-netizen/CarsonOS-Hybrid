@@ -53,14 +53,100 @@ static int lookup(uint32_t dir,const char*wanted,struct ent*out){
   uint32_t n=nextc(c);if(n>=EOC||n==BAD||n<2)return 0;c=n;
  }return 0;
 }
-int fs_read_file(const char*path,uint8_t*out,uint32_t cap,uint32_t*size_out){
- if(size_out)*size_out=0;if(!mounted||!path||!out||!cap)return 0;while(*path=='/')++path;uint32_t dir=root;struct ent e={0,0,0};
- while(*path){char component[256];unsigned len=0;while(path[len]&&path[len]!='/'){if(len>=255)return 0;component[len]=path[len];++len;}component[len]=0;path+=len;int more=0;while(*path=='/'){++path;more=1;}if(!lookup(dir,component,&e))return 0;
-  if(more){if(!(e.attr&0x10)||e.cluster<2)return 0;dir=e.cluster;}
-  else{if((e.attr&0x10)||e.size>cap||(e.size&&e.cluster<2))return 0;uint32_t left=e.size,pos=0,c=e.cluster;
-   for(uint32_t chain=0;left&&chain<clusters;++chain){uint32_t first=clsec(c);if(first==0xFFFFFFFFu)return 0;for(uint32_t s=0;s<spc&&left;++s){if(!readrel(first+s,sec))return 0;uint32_t n=left<SS?left:SS;for(uint32_t i=0;i<n;++i)out[pos+i]=sec[i];pos+=n;left-=n;}if(left){uint32_t n=nextc(c);if(n>=EOC||n==BAD||n<2)return 0;c=n;}}
-   if(left)return 0;if(size_out)*size_out=e.size;return 1;}
- }return 0;
+int fs_read_file(const char *path, uint8_t *out, uint32_t cap, uint32_t *size_out) {
+    if (size_out) {
+        *size_out = 0;
+    }
+
+    if (!mounted || !path || !out || !cap) {
+        return 0;
+    }
+
+    while (*path == '/') {
+        ++path;
+    }
+
+    uint32_t dir = root;
+    struct ent e = {0, 0, 0};
+
+    while (*path) {
+        char component[256];
+        unsigned len = 0;
+
+        while (path[len] && path[len] != '/') {
+            if (len >= 255) {
+                return 0;
+            }
+            component[len] = path[len];
+            ++len;
+        }
+        component[len] = 0;
+        path += len;
+
+        int more = 0;
+        while (*path == '/') {
+            ++path;
+            more = 1;
+        }
+
+        if (!lookup(dir, component, &e)) {
+            return 0;
+        }
+
+        if (more) {
+            if (!(e.attr & 0x10) || e.cluster < 2) {
+                return 0;
+            }
+            dir = e.cluster;
+        } else {
+            if ((e.attr & 0x10) || e.size > cap || (e.size && e.cluster < 2)) {
+                return 0;
+            }
+
+            uint32_t left = e.size;
+            uint32_t pos = 0;
+            uint32_t c = e.cluster;
+
+            for (uint32_t chain = 0; left && chain < clusters; ++chain) {
+                uint32_t first = clsec(c);
+                if (first == 0xFFFFFFFFu) {
+                    return 0;
+                }
+
+                for (uint32_t s = 0; s < spc && left; ++s) {
+                    if (!readrel(first + s, sec)) {
+                        return 0;
+                    }
+
+                    uint32_t n = left < SS ? left : SS;
+                    for (uint32_t i = 0; i < n; ++i) {
+                        out[pos + i] = sec[i];
+                    }
+                    pos += n;
+                    left -= n;
+                }
+
+                if (left) {
+                    uint32_t next = nextc(c);
+                    if (next >= EOC || next == BAD || next < 2) {
+                        return 0;
+                    }
+                    c = next;
+                }
+            }
+
+            if (left) {
+                return 0;
+            }
+
+            if (size_out) {
+                *size_out = e.size;
+            }
+            return 1;
+        }
+    }
+
+    return 0;
 }
 int fs_is_mounted(void){return mounted;}
 uint32_t fs_volume_sectors(void){return mounted?volsz:0;}
