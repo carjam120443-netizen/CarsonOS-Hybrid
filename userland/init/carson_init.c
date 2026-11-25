@@ -12,9 +12,18 @@ void carson_init_begin(carson_init_log_fn logger)
 {
     log_message = logger;
     initialized = 1;
-    log("\nCarsonInit: bootstrap coordinator starting\n");
-    log("CarsonInit: mode = kernel-integrated bootstrap\n");
+    log("\nCarsonOS boot sequence\n");
+    log("[BOOT] Starting CarsonInit...\n");
+    log("[BOOT] Init mode: kernel-integrated bootstrap\n");
     log("CarsonInit: user-mode process support is not available yet\n");
+}
+
+void carson_init_stage(const char *stage)
+{
+    if (!initialized || !stage) return;
+    log("[BOOT] ");
+    log(stage);
+    log("...\\n");
 }
 
 void carson_init_report(const char *component, int started)
@@ -29,7 +38,8 @@ void carson_init_report(const char *component, int started)
 void carson_init_finish(void)
 {
     if (!initialized) return;
-    log("CarsonInit: startup sequence complete\n");
-    log("CarsonInit: deferred services are unavailable, not fatal\n");
+    log("[BOOT] Startup sequence complete.\n");
+    log("[BOOT] Desktop is ready.\n");
+    log("[BOOT] Some services are deferred; boot can continue.\n");
     initialized = 0;
 }

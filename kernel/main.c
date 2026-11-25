@@ -1156,8 +1156,10 @@ void kernel_main(void)
     serial_write("\nCarsonOS Hybrid\n");
     serial_write("Boot status: kernel entry reached\n");
     carson_init_begin(serial_write);
+    carson_init_stage("Loading CPU exception manager");
     idt_init();
     serial_write("IDT: 32 exception gates installed\n");
+    carson_init_stage("Loading memory manager");
     memory_init();
     carson_init_report("memory manager", 1);
     serial_write("Memory map: usable bytes=");
@@ -1167,6 +1169,7 @@ void kernel_main(void)
     serial_write("\nHHDM offset=");
     serial_write_hex(memory_hhdm_offset());
     serial_write("\n");
+    carson_init_stage("Loading storage manager");
     if (ata_init()) {
         serial_write("ATA: primary-master disk detected, sectors=");
         serial_write_u64(ata_sector_count());
@@ -1185,6 +1188,7 @@ void kernel_main(void)
         carson_init_report("ATA storage", 0);
         carson_init_report("FAT32 filesystem", 0);
     }
+    carson_init_stage("Discovering PCI devices and network adapters");
     struct pci_device_info netdev;
     if (pci_find_e1000(&netdev)) {
         serial_write("PCI: Intel 82540EM detected at ");
@@ -1211,18 +1215,22 @@ void kernel_main(void)
         carson_init_report("PCI device discovery", 1);
         carson_init_report("E1000 networking", 0);
     }
+    carson_init_stage("Loading display manager");
     framebuffer_init();
     carson_init_report("framebuffer display", fb != 0);
     if (fb) {
         focused_window = 0;
+        carson_init_stage("Loading input managers");
         keyboard_init();
         mouse_init();
         carson_init_report("PS/2 keyboard", keyboard_ready);
         carson_init_report("PS/2 mouse", mouse_ready);
         serial_write("CarsonWM diagnostic: input initialization returned\n");
+        carson_init_stage("Loading CarsonWM desktop");
         draw_desktop();
         serial_write("CarsonWM: desktop ready\n");
         carson_init_report("CarsonWM desktop", 1);
+        carson_init_stage("Starting CarsonShell");
         serial_write("CarsonShell: ready\n");
         carson_init_report("CarsonShell command handler", 1);
     } else {

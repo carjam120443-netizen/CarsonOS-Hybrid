@@ -9,6 +9,7 @@ typedef void (*carson_init_log_fn)(const char *message);
  * isolation, executable loading, and system calls exist.
  */
 void carson_init_begin(carson_init_log_fn logger);
+void carson_init_stage(const char *stage);
 void carson_init_report(const char *component, int started);
 void carson_init_finish(void);
 
